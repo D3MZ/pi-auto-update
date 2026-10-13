@@ -40,6 +40,7 @@ test("RPC smoke contract parses JSONL and accepts actual command registration an
 	assert.equal(
 		passed("happy_path", {
 			responses: [commandInventory, handledPrompt, successNotification],
+			updaterInvocations: ["update --extensions", "update"],
 			exit_code: 0,
 		}),
 		true,
@@ -56,6 +57,14 @@ test("RPC smoke contract fails closed when registration or the feature response 
 		passed("happy_path", { responses: [commandInventory, successNotification], exit_code: 0 }),
 		false,
 	);
+	assert.equal(
+		passed("happy_path", {
+			responses: [commandInventory, handledPrompt, successNotification],
+			updaterInvocations: ["update"],
+			exit_code: 0,
+		}),
+		false,
+	);
 });
 
 test("RPC smoke contract requires handled errors and second-process reload evidence", () => {
@@ -64,6 +73,7 @@ test("RPC smoke contract requires handled errors and second-process reload evide
 	assert.equal(
 		passed("reload_cleanup", {
 			responses: [commandInventory, handledPrompt, successNotification],
+			updaterInvocations: ["update --extensions", "update"],
 			exit_code: 0,
 			processExited: true,
 			timedOut: false,

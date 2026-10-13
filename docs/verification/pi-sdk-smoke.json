@@ -69,7 +69,7 @@
       "assertions": [
         {
           "id": "feature_response",
-          "expected": "The actual Pi host handles /auto-update-now and emits the successful update notification",
+          "expected": "The actual Pi host handles /auto-update-now, invokes both updater commands, and emits the successful update notification",
           "observed": {
             "registration": {
               "response": {
@@ -127,6 +127,10 @@
                 "message": "Pi extensions and Pi update checks completed",
                 "notifyType": "info"
               }
+            ],
+            "updaterInvocations": [
+              "update --extensions",
+              "update"
             ]
           },
           "passed": true
@@ -212,7 +216,7 @@
         },
         {
           "id": "reloaded_feature_response",
-          "expected": "The second process handles /auto-update-now and emits the successful update notification",
+          "expected": "The second process handles /auto-update-now, invokes both updater commands, and emits the successful update notification",
           "observed": {
             "prompt": {
               "id": "feature",
@@ -236,6 +240,10 @@
                 "message": "Pi extensions and Pi update checks completed",
                 "notifyType": "info"
               }
+            ],
+            "updaterInvocations": [
+              "update --extensions",
+              "update"
             ]
           },
           "passed": true

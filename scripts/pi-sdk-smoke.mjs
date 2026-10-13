@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -243,7 +243,7 @@ function setPath(env, value) {
 	env[key] = value;
 }
 
-function isolatedEnv({ agentDir, tempRoot, sdkBin, missingUpdater = false }) {
+function isolatedEnv({ agentDir, tempRoot, sdkBin, updaterBin, updaterLog, missingUpdater = false }) {
 	const env = { ...process.env };
 	delete env.PI_OFFLINE;
 	delete env.PI_INTERCOM_SESSION_ID;
@@ -251,7 +251,10 @@ function isolatedEnv({ agentDir, tempRoot, sdkBin, missingUpdater = false }) {
 	env.PI_AUTO_UPDATE = "0";
 	env.npm_config_prefix = path.join(tempRoot, "npm-global");
 	env.npm_config_cache = path.join(tempRoot, "npm-cache");
-	setPath(env, missingUpdater ? path.join(tempRoot, "empty-bin") : [sdkBin, process.env.PATH].filter(Boolean).join(path.delimiter));
+	if (updaterLog) env.PI_AUTO_UPDATE_SMOKE_LOG = updaterLog;
+	setPath(env, missingUpdater
+		? path.join(tempRoot, "empty-bin")
+		: [updaterBin, sdkBin, process.env.PATH].filter(Boolean).join(path.delimiter));
 	return env;
 }
 
@@ -286,6 +289,7 @@ function describeProcess(name, command, result, extraAssertions = []) {
 	const responses = parseJsonLines(stdout);
 	const assertions = [...behaviorAssertions(name, {
 		responses,
+		updaterInvocations: command.updaterInvocations ?? [],
 		stdout,
 		stderr,
 		exit_code,
@@ -310,7 +314,22 @@ function describeProcess(name, command, result, extraAssertions = []) {
 	};
 }
 
-function createRpcRunner({ piCli, extensionEntry, agentDir, projectDir, tempRoot, sdkBin }) {
+async function createUpdaterShim(updaterBin) {
+	await mkdir(updaterBin, { recursive: true });
+	if (process.platform === "win32") {
+		await writeFile(
+			path.join(updaterBin, "pi.cmd"),
+			["@echo off", `>>"%PI_AUTO_UPDATE_SMOKE_LOG%" echo %*`, "exit /b 0", ""].join("\r\n"),
+			"utf8",
+		);
+		return;
+	}
+	const shimPath = path.join(updaterBin, "pi");
+	await writeFile(shimPath, ["#!/bin/sh", `printf '%s\\n' "$*" >> "$PI_AUTO_UPDATE_SMOKE_LOG"`, ""].join("\n"), "utf8");
+	await chmod(shimPath, 0o755);
+}
+
+function createRpcRunner({ piCli, extensionEntry, agentDir, projectDir, tempRoot, sdkBin, updaterBin }) {
 	const args = [
 		piCli,
 		"--no-session",
@@ -325,29 +344,40 @@ function createRpcRunner({ piCli, extensionEntry, agentDir, projectDir, tempRoot
 		"--mode",
 		"rpc",
 	];
-	const run = (includeFeature, missingUpdater = false) => runProcess(process.execPath, args, {
-		cwd: projectDir,
-		env: isolatedEnv({ agentDir, tempRoot, sdkBin, missingUpdater }),
-		timeoutMs: SHORT_PROBE_TIMEOUT_MS,
-		cleanupGraceMs: CLEANUP_GRACE_MS,
-		interact: async ({ sendRecords, waitForRecords }) => {
-			sendRecords([{ id: "inventory", type: "get_commands" }]);
-			await waitForRecords((responses) => responses.some((row) =>
-				row?.id === "inventory" && row.command === "get_commands" && row.success === true,
-			));
-			if (!includeFeature) return;
+	let invocation = 0;
+	const run = async (includeFeature, missingUpdater = false) => {
+		const updaterLog = path.join(tempRoot, `updater-invocations-${invocation++}.log`);
+		const result = await runProcess(process.execPath, args, {
+			cwd: projectDir,
+			env: isolatedEnv({ agentDir, tempRoot, sdkBin, updaterBin, updaterLog, missingUpdater }),
+			timeoutMs: SHORT_PROBE_TIMEOUT_MS,
+			cleanupGraceMs: CLEANUP_GRACE_MS,
+			interact: async ({ sendRecords, waitForRecords }) => {
+				sendRecords([{ id: "inventory", type: "get_commands" }]);
+				await waitForRecords((responses) => responses.some((row) =>
+					row?.id === "inventory" && row.command === "get_commands" && row.success === true,
+				));
+				if (!includeFeature) return;
 
-			sendRecords([{ id: "feature", type: "prompt", message: "/auto-update-now" }]);
-			await waitForRecords((responses) => {
-				const prompt = responses.find((row) => row?.id === "feature" && row.command === "prompt");
-				const finished = responses.some((row) => row?.type === "extension_ui_request" && row.method === "notify" &&
-					typeof row.message === "string" &&
-					(row.message === "Pi extensions and Pi update checks completed" || row.message.startsWith("Pi auto-update failed\n")),
-				);
-				return prompt?.success === true && prompt.data?.disposition === "handled" && finished;
-			});
-		},
-	});
+				sendRecords([{ id: "feature", type: "prompt", message: "/auto-update-now" }]);
+				await waitForRecords((responses) => {
+					const prompt = responses.find((row) => row?.id === "feature" && row.command === "prompt");
+					const finished = responses.some((row) => row?.type === "extension_ui_request" && row.method === "notify" &&
+						typeof row.message === "string" &&
+						(row.message === "Pi extensions and Pi update checks completed" || row.message.startsWith("Pi auto-update failed\n")),
+					);
+					return prompt?.success === true && prompt.data?.disposition === "handled" && finished;
+				});
+			},
+		});
+		try {
+			result.updaterInvocations = (await readFile(updaterLog, "utf8")).split(/\r?\n/).filter(Boolean);
+		} catch (error) {
+			if (error?.code !== "ENOENT") throw error;
+			result.updaterInvocations = [];
+		}
+		return result;
+	};
 	return { run, args };
 }
 
@@ -391,11 +421,13 @@ async function main() {
 	const projectDir = path.join(tempRoot, "project");
 	const packDir = path.join(tempRoot, "pack");
 	const emptyBin = path.join(tempRoot, "empty-bin");
-	await Promise.all([agentDir, projectDir, packDir, emptyBin].map((directory) => mkdir(directory, { recursive: true })));
+	const updaterBin = path.join(tempRoot, "updater-bin");
+	await Promise.all([agentDir, projectDir, packDir, emptyBin, updaterBin].map((directory) => mkdir(directory, { recursive: true })));
+	await createUpdaterShim(updaterBin);
 	const tarballPath = await packPackage(packDir);
 	const packageDir = await installPackedPackage(npmRoot, tarballPath, manifest.name);
 	const extensionEntry = path.join(packageDir, "extensions", "auto-update.ts");
-	const rpc = createRpcRunner({ piCli, extensionEntry, agentDir, projectDir, tempRoot, sdkBin });
+	const rpc = createRpcRunner({ piCli, extensionEntry, agentDir, projectDir, tempRoot, sdkBin, updaterBin });
 	const commandMeta = { description: "npm run smoke:pi", tempRoot };
 	const cases = [];
 
@@ -404,14 +436,17 @@ async function main() {
 		cases.push(describeProcess("extension_load", commandMeta, extensionLoad));
 
 		const happyPath = await rpc.run(true);
-		cases.push(describeProcess("happy_path", commandMeta, happyPath));
+		cases.push(describeProcess("happy_path", { ...commandMeta, updaterInvocations: happyPath.updaterInvocations }, happyPath));
 
 		const errorPath = await rpc.run(true, true);
 		cases.push(describeProcess("error_path", commandMeta, errorPath));
 
 		const firstProcess = await rpc.run(false);
 		const secondProcess = await rpc.run(true);
-		const secondResult = describeProcess("reload_cleanup", commandMeta, secondProcess);
+		const secondResult = describeProcess("reload_cleanup", {
+			...commandMeta,
+			updaterInvocations: secondProcess.updaterInvocations,
+		}, secondProcess);
 		const bothProcessesExitedCleanly = firstProcess.status === 0 && firstProcess.processExited &&
 			!firstProcess.timedOut && secondProcess.status === 0 && secondProcess.processExited && !secondProcess.timedOut;
 		const cleanShutdown = secondResult.assertions.find((item) => item.id === "clean_shutdown");

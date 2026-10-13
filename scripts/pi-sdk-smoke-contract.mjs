@@ -44,7 +44,16 @@ function notifications(responses) {
 	return responses.filter((row) => row?.type === "extension_ui_request" && row.method === "notify");
 }
 
-export function behaviorAssertions(name, { responses, stdout, stderr, exit_code, processExited, timedOut, expectedVersion }) {
+export function behaviorAssertions(name, {
+	responses,
+	updaterInvocations,
+	stdout,
+	stderr,
+	exit_code,
+	processExited,
+	timedOut,
+	expectedVersion,
+}) {
 	const registration = commandRegistered(responses);
 	const prompt = commandResponse(responses);
 	const notifyRows = notifications(responses);
@@ -66,10 +75,11 @@ export function behaviorAssertions(name, { responses, stdout, stderr, exit_code,
 		return [
 			assertion(
 				"feature_response",
-				"The actual Pi host handles /auto-update-now and emits the successful update notification",
-				{ registration, prompt: prompt ?? null, notifications: notifyRows },
+				"The actual Pi host handles /auto-update-now, invokes both updater commands, and emits the successful update notification",
+				{ registration, prompt: prompt ?? null, notifications: notifyRows, updaterInvocations },
 				registration.command?.source === "extension" && prompt?.success === true &&
-					prompt.data?.disposition === "handled" && !!featureNotification,
+					prompt.data?.disposition === "handled" && !!featureNotification &&
+					JSON.stringify(updaterInvocations) === JSON.stringify(["update --extensions", "update"]),
 			),
 		];
 	}
@@ -98,9 +108,10 @@ export function behaviorAssertions(name, { responses, stdout, stderr, exit_code,
 			),
 			assertion(
 				"reloaded_feature_response",
-				"The second process handles /auto-update-now and emits the successful update notification",
-				{ prompt: prompt ?? null, notifications: notifyRows },
-				prompt?.success === true && prompt.data?.disposition === "handled" && !!featureNotification,
+				"The second process handles /auto-update-now, invokes both updater commands, and emits the successful update notification",
+				{ prompt: prompt ?? null, notifications: notifyRows, updaterInvocations },
+				prompt?.success === true && prompt.data?.disposition === "handled" && !!featureNotification &&
+					JSON.stringify(updaterInvocations) === JSON.stringify(["update --extensions", "update"]),
 			),
 			assertion(
 				"clean_shutdown",
