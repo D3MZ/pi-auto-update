@@ -119,7 +119,7 @@ into a temporary Pi agent directory, and checks package loading with
 
 `npm run smoke:pi` separately launches the locally pinned Pi CLI in RPC mode,
 loads the packed extension, runs its manual update command, verifies handled
-failures and a second-process reload/cleanup, and exercises the native host
+failures and a second-process restart/cleanup, and exercises the native host
 shell. It uses isolated Pi/npm directories and makes no model requests. CI runs
 this smoke as part of `npm run ci`.
 
