@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.7] - 2026-10-12
+
+### Changed
+
+- Pin the Pi SDK 1.1.0 development toolchain and add an actual Pi RPC compatibility smoke.
+- Require an explicit workflow dispatch before starting the release flow.
+
 ## 0.1.5 - 2026-09-27
 
 - chore: periodic patch bump after 7+ days without npm publish

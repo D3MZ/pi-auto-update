@@ -101,6 +101,7 @@ pi -e .
 ```bash
 npm install
 npm run ci
+npm run smoke:pi
 npm pack --dry-run
 PI_AUTO_UPDATE=0 pi -e .
 ```
@@ -112,10 +113,17 @@ loading behavior:
 npm run test:installed-smoke
 ```
 
-The smoke test packs the local package, installs the tarball into a temporary Pi
-agent directory, loads it through Pi's package resource loader with
-`PI_OFFLINE=1`, and asserts startup/reload handling does not invoke `pi update`
-or touch the user's real Pi settings.
+The installed-package smoke test packs the local package, installs the tarball
+into a temporary Pi agent directory, and checks package loading with
+`PI_OFFLINE=1`.
+
+`npm run smoke:pi` separately launches the locally pinned Pi CLI in RPC mode,
+loads the packed extension, runs its manual update command, verifies handled
+failures and a second-process restart/cleanup, and exercises the native host
+shell. The actual Pi host and extension handler run in isolated Pi/npm
+directories; temporary updater shims record both commands and prevent real
+package or Pi updates. The error case removes the shims to verify handled
+failures. The smoke makes no model requests. CI runs it as part of `npm run ci`.
 
 ## Release
 
