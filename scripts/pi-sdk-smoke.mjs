@@ -25,6 +25,19 @@ async function readJson(filePath) {
 	return JSON.parse(await readFile(filePath, "utf8"));
 }
 
+function resolveReviewedHeadSha() {
+	const result = spawnSync("git", ["rev-parse", "HEAD"], {
+		cwd: root,
+		encoding: "utf8",
+		windowsHide: true,
+	});
+	const head = result.stdout?.trim();
+	if (result.status !== 0 || !/^[0-9a-f]{40}$/.test(head ?? "")) {
+		throw new Error(`git rev-parse HEAD failed: ${(result.stderr || result.stdout || "").trim()}`);
+	}
+	return head;
+}
+
 function npmInvocation(args) {
 	if (process.env.npm_execpath) {
 		return { command: process.execPath, args: [process.env.npm_execpath, ...args], shell: false };
@@ -478,6 +491,8 @@ async function main() {
 			verification_contract: VERIFICATION_CONTRACT,
 			sdk_versions: sdkVersions,
 			platform: process.platform,
+			head_sha: resolveReviewedHeadSha(),
+			node_version: process.version,
 			model_inference: "none; actual Pi CLI/RPC and package extension lifecycle, with an isolated empty Pi agent directory",
 			unhandled_errors: cases.filter((item) => item.hasUnhandledError).length,
 			extension_load_errors: cases.filter((item) => item.hasLoadError || (item.name === "extension_load" && !item.passed)).length,

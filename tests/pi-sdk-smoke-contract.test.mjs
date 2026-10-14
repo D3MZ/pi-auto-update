@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import { behaviorAssertions, parseJsonLines } from "../scripts/pi-sdk-smoke-contract.mjs";
 
@@ -104,6 +105,15 @@ test("RPC smoke contract requires handled errors and second-process reload evide
 		}),
 		false,
 	);
+});
+
+test("smoke runner records reviewed head and node version in the committed report", () => {
+	const source = readFileSync(new URL("../scripts/pi-sdk-smoke.mjs", import.meta.url), "utf8");
+	assert.match(source, /head_sha:\s*resolveReviewedHeadSha\(\)/);
+	assert.match(source, /node_version:\s*process\.version/);
+	const report = JSON.parse(readFileSync(new URL("../docs/verification/pi-sdk-smoke.json", import.meta.url), "utf8"));
+	assert.match(report.head_sha, /^[0-9a-f]{40}$/);
+	assert.match(report.node_version, /^v\d+\.\d+\.\d+/);
 });
 
 test("native shell assertion requires the exact pinned Pi version", () => {
