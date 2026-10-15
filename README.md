@@ -1,158 +1,184 @@
-# Pi Auto Update
+# Pi Auto Update — security-review fork
 
-[![Join dotfield.xyz on Discord](https://img.shields.io/badge/Join%20dotfield.xyz%20on%20Discord-5865F2?logo=discord&logoColor=white)](https://discord.gg/4945dXZVW5)
+Fork of [eiei114/pi-auto-update](https://github.com/eiei114/pi-auto-update).
+**This fork replaces unconditional updates with a fail-closed review gate.**
+It is distributed through Git, not the upstream npm package.
 
-[![CI](https://github.com/eiei114/pi-auto-update/actions/workflows/ci.yml/badge.svg)](https://github.com/eiei114/pi-auto-update/actions/workflows/ci.yml)
-[![Publish](https://github.com/eiei114/pi-auto-update/actions/workflows/publish.yml/badge.svg)](https://github.com/eiei114/pi-auto-update/actions/workflows/publish.yml)
-[![npm version](https://img.shields.io/npm/v/pi-auto-update.svg)](https://www.npmjs.com/package/pi-auto-update)
-[![npm downloads](https://img.shields.io/npm/dm/pi-auto-update.svg)](https://www.npmjs.com/package/pi-auto-update)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Pi package](https://img.shields.io/badge/pi-package-purple.svg)](https://pi.dev/packages)
-[![Trusted Publishing](https://img.shields.io/badge/npm-Trusted%20Publishing-blue.svg)](docs/release.md)
-<a href="https://buymeacoffee.com/ekawano114m"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" width="217" height="60"></a>
+An AI review and an advisory scan can miss vulnerabilities. Approval means
+**no issue was detected in the supplied changes**, not proof of safety.
 
-> Keep installed Pi packages and Pi itself current automatically at process startup.
+## Did the original use an agent?
 
-## What this is
+No. At upstream commit
+[`e49977a`](https://github.com/eiei114/pi-auto-update/blob/e49977a698644bd231bcf45e782f006acc65028e/extensions/auto-update.ts),
+its entire update policy was:
 
-Pi Auto Update is a TypeScript Pi package that runs Pi's own update commands once when a new Pi process starts. It updates installed package extensions first, then checks Pi itself, without replacing Pi's built-in updater.
-
-## Features
-
-- Runs `pi update --extensions` before `pi update`.
-- Waits for each update step to finish before starting the next one.
-- Automatically runs once per Pi process, not again after `/reload`, `/new`, `/resume`, or `/fork`.
-- Skips automatic updates when `PI_OFFLINE=1` or `PI_AUTO_UPDATE=0`.
-- On Windows, defers extension updates when an active Pi runtime may hold package files open.
-- Provides `/auto-update-now` for an explicit update check.
-- Reports failures in the Pi UI without aborting session startup.
-
-## Install
-
-Install the published npm package with Pi:
-
-```bash
-pi install npm:pi-auto-update
+```mermaid
+flowchart TD
+    S[session_start] --> R{reason is startup?}
+    R -->|no| X[Return]
+    R -->|yes| E{Offline or automatic updates disabled?}
+    E -->|yes| X
+    E -->|no| W{Windows and active intercom runtime?}
+    W -->|yes| P[Run pi update]
+    W -->|no| U[Run pi update --extensions]
+    U --> P
+    P --> N[Clear status and report failures/notices]
+    M[/auto-update-now] --> W
 ```
 
-Pin a specific version when you want reproducible installs:
+- Each command was awaited, with a 15-minute timeout.
+- An extension-update failure did **not** prevent the subsequent Pi update.
+- Windows file-lock failures were reported as deferred.
+- `/reload`, `/new`, `/resume` and `/fork` did not trigger updates.
+- The manual command bypassed the original startup skip checks.
+- No model call, diff review, dependency audit, or security approval existed.
 
-```bash
-pi install npm:pi-auto-update@0.1.4
+## How this fork works
+
+```mermaid
+flowchart TD
+    S[Startup or /auto-update-now] --> O{Offline?}
+    O -->|yes| B[No update]
+    O -->|no| L[Acquire per-agent cross-process lock]
+    L --> P[Read personal package declarations only]
+    P --> D[Defer pins and unsupported update types]
+    P --> T[Snapshot installed files and stage supported targets]
+    T --> I[Disable lifecycle scripts, Git hooks and executable dependency sources]
+    I --> A[Verify installed dependency identities and run npm audit]
+    A --> C[Collect COMPLETE old/new changed files and candidate manifests]
+    C --> R[Fresh tool-less AI security reviewer]
+    R --> G{Complete digest-bound approval AND zero findings?}
+    G -->|no, error, timeout, or too large| B
+    G -->|yes| H[Rehash frozen candidate and baseline; check settings unchanged]
+    H --> V{Still matches?}
+    V -->|no| B
+    V -->|yes| F[Rename exact reviewed directory into place; retain old tree]
+    F --> N[Save report; restart Pi to load updated code]
 ```
 
-Install into the current project instead of your user Pi settings:
+**The reviewer is a separate AI conversation, not an unrestricted child Pi
+process.** It uses the current Pi model and its configured authentication, with
+no tools, loaded candidate extensions, skills, project instructions, shell, or
+conversation history. It compares behavior against the installed baseline and
+checks source, manifests, and changed transitive dependency files.
+
+Every approval must be strict JSON, complete, bound to the candidate's SHA-256
+tree digest, and contain **zero findings of any severity**. Suspicious or
+unreasonable behavior, security concerns, missing context, malformed output,
+model failure, cancellation, failed scans, binary changes and oversized reviews
+block that target. There is no force/skip-review path.
+
+No package resolver or installer runs after approval. The exact frozen directory
+that was reviewed is promoted, with a rollback attempt on a failed second rename.
+The old installation remains in a backup directory.
+
+## Supported scope (important)
+
+| Update type | Policy |
+|---|---|
+| Personal `npm:name` / `npm:@scope/name` | Stage the managed `<agent-dir>/npm` tree; resolve latest, install from validated lock, audit and review all changed files |
+| Personal unpinned GitHub package | Clean default-branch checkout, fast-forward only; stage a fresh HTTPS clone, scan/review source and runtime dependencies |
+| Explicit npm versions/tags/ranges or Git refs | Leave the configured pin/ref unchanged |
+| Git runtime dependencies | Require a complete npm v2/v3 lockfile; install production dependencies with scripts disabled |
+| **Pi itself** | **Deferred; no unchecked `pi update` fallback** |
+| **Project-local packages** | **Deferred; this fork does not discover or trust project settings** |
+| Windows, legacy global npm layouts, custom npm/pnpm/Bun commands, private registries, other Git hosts, local paths | Deferred/blocked, never passed to the original updater |
+| Git with local/ignored files, custom attributes, symlinks or submodules; bundled/workspace dependencies | Manual review required |
+
+Only public `registry.npmjs.org` tarballs with SHA-512 integrity are accepted.
+Lockfile versions must match the actual installed package identities. Any
+`npm audit` finding (including low/info), audit error or missing audit metadata
+blocks installation. A Git package without runtime dependencies needs no npm
+install or dependency audit; its source still gets reviewed.
+
+Reviews include **entire before/after changed text files**, not just summaries or
+truncated hunks, plus candidate package manifests. Potential credential-file changes (such as `.env` or `auth.json`) are blocked
+before sending a review request. This is a conservative filename check, not
+comprehensive secret detection. The review limit is 180,000
+UTF-8 bytes, with a further conservative model-context limit. Large updates will
+often require human review. Unchanged code is not comprehensively audited.
+
+## Install this fork
+
+Requires Pi 1.1 or newer on macOS/Linux, with npm and Git on PATH.
+
+First remove the **original** updater, otherwise it can still perform unchecked
+updates independently:
 
 ```bash
-pi install npm:pi-auto-update -l
+# Use the matching command for how you installed the original:
+pi remove npm:pi-auto-update
+# or: pi remove git:github.com/eiei114/pi-auto-update
+
+pi install git:github.com/D3MZ/pi-auto-update
 ```
 
-Or install from GitHub:
+Review this fork before trusting it. Installing it opts supported personal
+packages into automatic reviews and updates at the next Pi process startup.
+A selected, authenticated Pi model is required when changes need review.
+For SDK embeddings, set `PI_CODING_AGENT_DIR` explicitly to the SDK agent directory;
+this extension uses that variable (or the normal CLI default), not SDK-only overrides.
+Review requests incur normal model costs and send package code to that model's
+configured provider. No live model request is necessary for the test suite.
 
-```bash
-pi install git:github.com/eiei114/pi-auto-update
-```
-
-Try it without permanently installing:
-
-```bash
-pi -e npm:pi-auto-update
-```
-
-## Quick start
-
-After installation, restart Pi. On process startup, Pi Auto Update runs:
-
-```bash
-pi update --extensions
-pi update
-```
-
-Run both checks manually at any time:
-
-```txt
+```text
 /auto-update-now
 ```
 
-On Windows, npm cannot replace an extension package while an active Pi runtime
-(including the `pi-intercom` broker) is using files inside that package. When
-that runtime is detected, the extension step is deferred and the Pi update
-still runs. If npm reports `EBUSY` (`-4082` or `4294963214`), close Pi
-runtimes and run `pi update --extensions` from a shell.
+`PI_AUTO_UPDATE=0` disables automatic startup checks; the manual command still
+uses the entire security gate. `PI_OFFLINE=1` blocks **both** automatic and manual
+network updates. Checks run once at startup, not again for replacement sessions;
+concurrent checks are coalesced and use a cross-process lock.
 
-Try the local checkout without permanently installing it:
+**Restart Pi after an approved update.** The current process may still have old
+modules in memory.
 
-```bash
-pi -e .
-```
+## Reports, recovery, and security boundaries
 
-## Package contents
+- Reports: `<agent-dir>/auto-update-security/reports/<id>.json`.
+- Reports store target status, tree digests, findings, reasons and backup paths,
+  not full source prompts. Model usage is recorded as a separate session entry.
+- Backups are intentionally retained and are not automatically pruned. Stop all
+  Pi processes before restoring a backup or cleaning old backups.
+- Promotion journals under each run directory record the original/backup paths.
+  A crash between the two renames can leave the live path missing; recover from
+  the journal/backup before restarting Pi.
+- A crash leaves `<agent-dir>/.auto-update-security.lock`. Verify its PID is no
+  longer running before removing it. Locks are never automatically stolen.
 
-| Path | Purpose |
-|---|---|
-| `extensions/auto-update.ts` | Startup update hook and `/auto-update-now` command |
-| `docs/release.md` | Trusted Publishing and release flow |
-| `README.md` | GitHub and npm package entrypoint |
-| `CHANGELOG.md` | Versioned release notes |
-| `LICENSE` | MIT license |
+This is **not an operating-system sandbox**, a proof of code safety, or a defense
+against malicious processes running as the same user. npm, Git, the selected
+provider, the current baseline and this extension itself remain trusted.
+Prompt injection is mitigated by tool isolation and conservative instructions,
+not eliminated.
+
+This gate controls **only this fork's update path**. Pi's initial/missing-package
+installation, manual `pi update`/`pi install`, other updaters, and future source
+discovery are outside its control. It does not change Pi's core updater. Unknown
+vulnerabilities and issues hidden in unchanged code may go undetected.
 
 ## Development
 
 ```bash
-npm install
+npm ci --ignore-scripts
 npm run ci
-npm run smoke:pi
-npm pack --dry-run
+# Optional real public-registry resolve/install/audit test, still no model inference:
+npm run test:network
 PI_AUTO_UPDATE=0 pi -e .
 ```
 
-Run only the installed-package smoke when changing package metadata or startup
-loading behavior:
+The tests exercise fail-closed verdicts, findings, audit errors, tampering,
+cancellation, locking, source restrictions, real Git staging/hook suppression,
+and packed-package loading. The Pi SDK smoke launches real isolated CLI/RPC
+processes and verifies a second-process restart/cleanup without real updates.
+The opt-in npm integration uses a scripted reviewer; it tests the mechanism,
+**not a live model's security judgment**.
 
-```bash
-npm run test:installed-smoke
-```
+Implementation: [entrypoint](extensions/auto-update.ts),
+[gate/promotion](extensions/security/gate.ts),
+[staging/audit](extensions/security/targets.ts),
+[reviewer](extensions/security/review.ts), [snapshots](extensions/security/tree.ts).
+Detailed diagrams: [docs/how-it-works.md](docs/how-it-works.md).
 
-The installed-package smoke test packs the local package, installs the tarball
-into a temporary Pi agent directory, and checks package loading with
-`PI_OFFLINE=1`.
-
-`npm run smoke:pi` separately launches the locally pinned Pi CLI in RPC mode,
-loads the packed extension, runs its manual update command, verifies handled
-failures and a second-process restart/cleanup, and exercises the native host
-shell. The actual Pi host and extension handler run in isolated Pi/npm
-directories; temporary updater shims record both commands and prevent real
-package or Pi updates. The error case removes the shims to verify handled
-failures. The smoke makes no model requests. CI runs it as part of `npm run ci`.
-
-## Release
-
-This package is set up for npm Trusted Publishing, so no `NPM_TOKEN` is required.
-
-```bash
-npm version patch
-git push
-```
-
-See [`docs/release.md`](docs/release.md) for setup details.
-
-## Docs
-
-- [`docs/release.md`](docs/release.md) — Trusted Publishing and automated release details
-- [`ROADMAP.md`](ROADMAP.md) — current status and planned work
-
-## Security
-
-Installing this package opts the machine into automatic code updates from Pi and every package source configured in Pi. Review and trust those sources before installing this extension.
-
-Pi packages can execute code with your local permissions. For vulnerability reporting, see [`SECURITY.md`](SECURITY.md).
-
-## Links
-
-- npm: https://www.npmjs.com/package/pi-auto-update
-- GitHub: https://github.com/eiei114/pi-auto-update
-- Issues: https://github.com/eiei114/pi-auto-update/issues
-
-## License
-
-MIT
+MIT. Original author: eiei114. Fork changes: D3MZ.

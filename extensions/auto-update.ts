@@ -1,196 +1,57 @@
-import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { getAgentDir, type ExtensionAPI, type ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { runSecurityUpdates, safeMessage } from "./security/gate.ts";
+import { modelReviewer } from "./security/review.ts";
 
 const STATUS_KEY = "pi-auto-update";
-const UPDATE_TIMEOUT_MS = 15 * 60 * 1000;
-const INTERCOM_SESSION_ID_ENV = "PI_INTERCOM_SESSION_ID";
-
-type UpdateStep = {
-	label: string;
-	args: string[];
-};
-
-type CommandInvocation = {
-	command: string;
-	args: string[];
-};
-
-const UPDATE_STEPS: UpdateStep[] = [
-	{ label: "extensions", args: ["update", "--extensions"] },
-	{ label: "Pi", args: ["update"] },
-];
-
-const WINDOWS_PACKAGE_LOCK_PATTERNS = [
-	/\bEBUSY\b/i,
-	/\b4294963214\b/,
-	/-4082\b/,
-];
-const WINDOWS_PACKAGE_LOCK_NOTICE =
-	"extensions: deferred — Windows package files are in use; close all Pi runtimes and run pi update --extensions from a shell";
-
-/**
- * npm and pnpm install Windows CLI entrypoints as .cmd shims. Pi's exec API
- * deliberately uses shell:false, so resolve those shims through cmd.exe.
- */
-export function getPiCommandInvocation(
-	args: string[],
-	platform: NodeJS.Platform = process.platform,
-	comSpec: string | undefined = process.env.ComSpec ?? process.env.COMSPEC,
-): CommandInvocation {
-	if (platform !== "win32") return { command: "pi", args };
-
-	return {
-		command: comSpec || "cmd.exe",
-		args: ["/d", "/s", "/c", ["pi", ...args].join(" ")],
-	};
-}
-
-function isTruthy(value: string | undefined): boolean {
-	return /^(1|true|yes)$/i.test(value ?? "");
-}
-
-function isFalsey(value: string | undefined): boolean {
-	return /^(0|false|no)$/i.test(value ?? "");
-}
-
-function shouldSkipAutoUpdate(): string | undefined {
-	if (isTruthy(process.env.PI_OFFLINE)) return "offline mode";
-	if (isFalsey(process.env.PI_AUTO_UPDATE)) return "PI_AUTO_UPDATE is disabled";
-	return undefined;
-}
-
-export function getExtensionUpdateSkipReason(
-	platform: NodeJS.Platform = process.platform,
-	env: NodeJS.ProcessEnv = process.env,
-): string | undefined {
-	if (platform !== "win32") return undefined;
-	if (env[INTERCOM_SESSION_ID_ENV]?.trim()) {
-		return "an active pi-intercom runtime may keep extension package files locked";
-	}
-	return undefined;
-}
-
-export function isWindowsPackageLockFailure(
-	output: string,
-	platform: NodeJS.Platform = process.platform,
-): boolean {
-	return isWindowsPackageLockFailureStreams(output, "", platform);
-}
-
-function isWindowsPackageLockFailureStreams(
-	stdout: string,
-	stderr: string,
-	platform: NodeJS.Platform = process.platform,
-): boolean {
-	if (platform !== "win32") return false;
-	// npm lock failures usually land on stderr; scan it before verbose stdout.
-	const sources = stderr ? [stderr, stdout] : [stdout];
-	for (const text of sources) {
-		if (WINDOWS_PACKAGE_LOCK_PATTERNS.some((pattern) => pattern.test(text))) return true;
-	}
-	return false;
-}
-
-function lastOutputLine(stdout: string, stderr: string): string | undefined {
-	const combined = stderr.length > 0 ? `${stdout}\n${stderr}` : stdout;
-	let end = combined.length;
-	while (end > 0) {
-		let start = end;
-		while (start > 0 && combined[start - 1] !== "\n") start -= 1;
-		const line = combined.slice(start, end).replace(/\r$/, "").trim();
-		if (line) return line.slice(0, 300);
-		end = start;
-		while (end > 0 && combined[end - 1] === "\n") end -= 1;
-	}
-	return undefined;
-}
+const truthy = (value: string | undefined) => /^(1|true|yes)$/i.test(value ?? "");
+const disabled = () => /^(0|false|no)$/i.test(process.env.PI_AUTO_UPDATE ?? "");
 
 export default function (pi: ExtensionAPI) {
 	let inFlight: Promise<void> | undefined;
+	let started = false;
+	let controller: AbortController | undefined;
 
 	async function runUpdates(ctx: ExtensionContext): Promise<void> {
 		if (inFlight) return inFlight;
-
-	inFlight = (async () => {
-			const failures: string[] = [];
-			const notices: string[] = [];
-			const extensionSkipReason = getExtensionUpdateSkipReason();
-			const steps = extensionSkipReason
-				? UPDATE_STEPS.filter((step) => step.label !== "extensions")
-				: UPDATE_STEPS;
-
-			if (extensionSkipReason) {
-				notices.push(
-					`extensions: skipped — ${extensionSkipReason}; close all Pi runtimes and run pi update --extensions from a shell`,
-				);
-			}
-
+		controller = new AbortController();
+		const signal = controller.signal;
+		inFlight = (async () => {
 			try {
-				for (const step of steps) {
-					ctx.ui.setStatus(STATUS_KEY, `Updating ${step.label}...`);
-
-					try {
-						const invocation = getPiCommandInvocation(step.args);
-						const result = await pi.exec(invocation.command, invocation.args, {
-							cwd: ctx.cwd,
-							timeout: UPDATE_TIMEOUT_MS,
-						});
-
-						if (result.code !== 0) {
-							const detail = lastOutputLine(result.stdout, result.stderr);
-							if (
-								step.label === "extensions" &&
-								isWindowsPackageLockFailureStreams(result.stdout, result.stderr)
-							) {
-								notices.push(WINDOWS_PACKAGE_LOCK_NOTICE);
-							} else {
-								failures.push(`${step.label}: exit ${result.code}${detail ? ` — ${detail}` : ""}`);
-							}
-						}
-					} catch (error) {
-						const message = error instanceof Error ? error.message : String(error);
-						if (step.label === "extensions" && isWindowsPackageLockFailure(message)) {
-							notices.push(WINDOWS_PACKAGE_LOCK_NOTICE);
-						} else {
-							failures.push(`${step.label}: ${message.slice(0, 300)}`);
-						}
-					}
-				}
+				if (truthy(process.env.PI_OFFLINE)) throw new Error("offline mode");
+				const { report, reportPath } = await runSecurityUpdates({
+					agentDir: getAgentDir(), signal,
+					reviewer: modelReviewer(ctx, (data) => pi.appendEntry("auto-update-security-usage", data)),
+					status: (message) => ctx.ui.setStatus(STATUS_KEY, message),
+				});
+				const blocked = report.results.filter((item) => item.status === "blocked").length;
+				const updated = report.results.filter((item) => item.status === "updated").length;
+				pi.appendEntry("auto-update-security-report", { reportPath, report });
+				if (ctx.hasUI) ctx.ui.notify(
+					`Pi security update completed: ${updated} updated, ${blocked} blocked\n${report.notices.map(safeMessage).join("\n")}\nReport: ${reportPath}${updated ? "\nRestart Pi to load reviewed updates." : ""}`,
+					blocked ? "warning" : "info",
+				);
+			} catch (error) {
+				if (ctx.hasUI) ctx.ui.notify("Pi security update blocked: " + safeMessage(error), "warning");
 			} finally {
 				ctx.ui.setStatus(STATUS_KEY, undefined);
 			}
-
-			if (!ctx.hasUI) return;
-
-			if (failures.length > 0) {
-				ctx.ui.notify(`Pi auto-update failed\n${failures.join("\n")}`, "warning");
-			} else if (notices.length > 0) {
-				ctx.ui.notify(`Pi auto-update completed\n${notices.join("\n")}`, "info");
-			} else {
-				ctx.ui.notify("Pi extensions and Pi update checks completed", "info");
-			}
-		})().finally(() => {
-			inFlight = undefined;
-		});
-
+		})().finally(() => { inFlight = undefined; controller = undefined; });
 		return inFlight;
 	}
 
 	pi.on("session_start", async (event, ctx) => {
-		if (event.reason !== "startup") return;
-
-		const skipReason = shouldSkipAutoUpdate();
-		if (skipReason) {
-			if (ctx.hasUI) ctx.ui.notify(`Pi auto-update skipped: ${skipReason}`, "info");
+		if (event.reason !== "startup" || started) return;
+		started = true;
+		const reason = truthy(process.env.PI_OFFLINE) ? "offline mode" : disabled() ? "PI_AUTO_UPDATE is disabled" : undefined;
+		if (reason) {
+			if (ctx.hasUI) ctx.ui.notify("Pi auto-update skipped: " + reason, "info");
 			return;
 		}
-
 		await runUpdates(ctx);
 	});
-
+	pi.on("session_shutdown", async () => { controller?.abort(); await inFlight; });
 	pi.registerCommand("auto-update-now", {
-		description: "Run pi update --extensions, then pi update",
-		handler: async (_args, ctx) => {
-			await runUpdates(ctx);
-		},
+		description: "Stage, scan and independently review supported package changes; install only approved bytes",
+		handler: async (_args, ctx) => { await runUpdates(ctx); },
 	});
 }

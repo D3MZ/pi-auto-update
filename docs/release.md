@@ -1,5 +1,10 @@
 # Release
 
+> Fork notice: this fork has `private: true` and is installed from
+> `git:github.com/D3MZ/pi-auto-update`. The upstream npm release procedures below
+> are retained for reference; do not publish this fork under the upstream name.
+
+
 `pi-auto-update` publishes to npm through GitHub Actions Trusted Publishing.
 
 ## Initial bootstrap publish

@@ -1,0 +1,52 @@
+import assert from "node:assert/strict";
+import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import test from "node:test";
+import { npm, run } from "../extensions/security/process.ts";
+import { runSecurityUpdates } from "../extensions/security/gate.ts";
+import { modelReviewer } from "../extensions/security/review.ts";
+import { snapshot } from "../extensions/security/tree.ts";
+
+// Explicit opt-in: real public-registry network traffic, no paid model inference or personal updates.
+test("real npm resolve/ci/audit + reviewer adapter + exact promotion, without lifecycle execution", {
+	skip: process.platform === "win32", timeout: 120_000,
+}, async (t) => {
+	const root = await mkdtemp(path.join(tmpdir(), "real-npm-gate-"));
+	t.after(() => rm(root, { recursive: true, force: true }));
+	const agent = path.join(root, "agent"), live = path.join(agent, "npm");
+	await mkdir(live, { recursive: true });
+	await writeFile(path.join(agent, "settings.json"), '{"packages":["npm:is-number"]}');
+	const manifest = { private: true, dependencies: { "is-number": "6.0.0" }, scripts: {
+		preinstall: "node -e \"require('fs').writeFileSync('LIFECYCLE_RAN','bad')\"",
+		install: "node -e \"require('fs').writeFileSync('LIFECYCLE_RAN','bad')\"",
+		postinstall: "node -e \"require('fs').writeFileSync('LIFECYCLE_RAN','bad')\"",
+	} };
+	await writeFile(path.join(live, "package.json"), JSON.stringify(manifest));
+	const signal = new AbortController().signal;
+	await npm(run, ["install", "--ignore-scripts", "--legacy-peer-deps", "--no-audit", "--no-fund"], live, signal);
+	let reviewCount = 0;
+	const reviewer = modelReviewer({
+		model: { provider: "fixture", id: "scripted-security-review", contextWindow: 200_000 },
+		modelRegistry: {
+			hasConfiguredAuth: () => true,
+			streamSimple: (_model, context) => {
+				const payload = JSON.parse(context.messages[0].content[0].text);
+				assert.ok(payload.changes.some((change) => change.path === "node_modules/is-number/index.js"));
+				assert.deepEqual(context.tools, []);
+				reviewCount++;
+				return { result: async () => ({ stopReason: "stop", content: [{ type: "text", text: JSON.stringify({
+					schemaVersion: 1, candidate: payload.candidate, decision: "approve", complete: true, findings: [],
+					reason: "Scripted integration fixture, not a live security judgment.",
+				}) }] }) };
+			},
+		},
+	}, () => {});
+	const { report } = await runSecurityUpdates({ agentDir: agent, signal, reviewer });
+	assert.equal(report.results[0].status, "updated", JSON.stringify(report));
+	assert.equal(reviewCount, 1);
+	assert.equal((await snapshot(live)).digest, report.results[0].candidate);
+	assert.equal(JSON.parse(await readFile(path.join(live, "node_modules/is-number/package.json"), "utf8")).version, "7.0.0");
+	await assert.rejects(access(path.join(live, "LIFECYCLE_RAN")), { code: "ENOENT" });
+	await assert.rejects(access(path.join(report.results[0].backup, "LIFECYCLE_RAN")), { code: "ENOENT" });
+});
