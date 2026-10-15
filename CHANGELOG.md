@@ -1,5 +1,17 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+
+- Stage supported personal package updates without executing candidate scripts; audit dependencies and require complete, zero-finding AI review before promoting the exact reviewed files.
+- Configure an independent reviewer with `autoUpdate.reviewModel` or `/auto-update-model`, using existing Pi authentication, including Codex OAuth.
+- Retain backups, promotion journals, and review reports; block incomplete checks, findings, failures, and tampering.
+
+### Changed
+
+- Replace unconditional updater commands with a fail-closed gate. Pi-core, project-local, Windows, and unsupported update types are deferred; AI approval is not a vulnerability-free guarantee.
+
 ## [0.1.7] - 2026-10-12
 
 ### Changed

@@ -1,6 +1,6 @@
 # Execution and trust boundaries
 
-See the [README](../README.md) for original-versus-fork flowcharts and supported scope.
+See the [README](../README.md) for setup, model settings, and supported scope.
 
 ## Original updater, exactly
 
@@ -38,7 +38,7 @@ The original `inFlight` promise coalesces concurrent requests inside its runtime
 Its manual command goes directly to the update loop, bypassing startup skip checks.
 It never asks an AI to assess either command or its downloaded code.
 
-## Fork: one supported target
+## Security gate: one supported target
 
 ```mermaid
 sequenceDiagram
@@ -96,5 +96,5 @@ does not grant or revoke approval for another.
   boundary. The two-rename promotion has a crash window, with journal/backups
   for manual recovery.
 - Pi core updates and project packages are intentionally deferred. Wrapping a
-  later `pi update` would allow unreviewed bytes to be installed, so this fork
-  never does that.
+  later `pi update` would allow unreviewed bytes to be installed, so the security
+  gate never does that.

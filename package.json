@@ -2,7 +2,6 @@
   "name": "pi-auto-update",
   "version": "0.1.7",
   "description": "Stage Pi package updates and install only after dependency scanning and independent AI security review.",
-  "private": true,
   "type": "module",
   "license": "MIT",
   "author": "eiei114",
@@ -15,12 +14,12 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/D3MZ/pi-auto-update.git"
+    "url": "git+https://github.com/eiei114/pi-auto-update.git"
   },
   "bugs": {
-    "url": "https://github.com/D3MZ/pi-auto-update/issues"
+    "url": "https://github.com/eiei114/pi-auto-update/issues"
   },
-  "homepage": "https://github.com/D3MZ/pi-auto-update#readme",
+  "homepage": "https://github.com/eiei114/pi-auto-update#readme",
   "files": [
     "extensions/",
     "docs/",

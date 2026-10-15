@@ -1,13 +1,11 @@
 # Security policy
 
-Report fork-specific vulnerabilities privately through GitHub Security Advisories
-for `D3MZ/pi-auto-update`. If private reporting is unavailable, contact the fork
-maintainer privately. Do not open public issues for undisclosed vulnerabilities.
-Upstream issues belong to `eiei114/pi-auto-update`.
+Report vulnerabilities privately through GitHub Security Advisories for
+`eiei114/pi-auto-update`. Do not open public issues for undisclosed vulnerabilities.
 
 ## Trust model
 
-This fork installs supported updates only after complete dependency scanning
+This extension installs supported updates only after complete dependency scanning
 (where applicable) and a separate tool-less AI review with zero findings.
 It does not promise vulnerability-free code and is not an OS sandbox.
 
@@ -21,6 +19,6 @@ Pi core, and project-local packages are deferred. Offline mode applies to manual
 commands too. Lifecycle scripts and Git hooks are disabled during staging.
 
 The gate covers only this extension's update path, not initial/missing-package
-installation, Pi's own commands, or other updaters. Remove the original auto-updater
-before using this fork. Stop other Pi processes before restoring backups.
+installation, Pi's own commands, or other updaters. Stop other Pi processes before
+restoring backups.
 See [README.md](README.md) for scope, recovery and limitations.
