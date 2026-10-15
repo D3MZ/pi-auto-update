@@ -4,6 +4,15 @@ Fork of [eiei114/pi-auto-update](https://github.com/eiei114/pi-auto-update).
 **This fork replaces unconditional updates with a fail-closed review gate.**
 It is distributed through Git, not the upstream npm package.
 
+## Features at a glance
+
+- Startup and manual update checks with an independent, tool-less AI code review.
+- Complete old/new changed-file review, dependency auditing, and script-free staging.
+- Configurable review model via `autoUpdate.reviewModel` or `/auto-update-model`, including Codex OAuth models.
+- Updates only after complete approval and zero findings; errors block updates.
+- Installs the exact reviewed files, retains backups, and saves review reports.
+- Personal npm/GitHub packages on macOS/Linux; Pi-core, project-local, Windows, and unsupported updates are deferred.
+
 An AI review and an advisory scan can miss vulnerabilities. Approval means
 **no issue was detected in the supplied changes**, not proof of safety.
 
