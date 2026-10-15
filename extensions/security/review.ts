@@ -1,5 +1,6 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { randomUUID } from "node:crypto";
+import { parseModelRef } from "./settings.ts";
 
 export type Verdict = {
 	schemaVersion: 1;
@@ -9,7 +10,20 @@ export type Verdict = {
 	findings: { severity: "info" | "low" | "medium" | "high" | "critical"; description: string }[];
 	reason: string;
 };
-export type Reviewer = (payload: string, digest: string, signal: AbortSignal) => Promise<Verdict>;
+export type Reviewer = (payload: string, digest: string, signal: AbortSignal, reviewModel?: string) => Promise<Verdict>;
+
+export function resolveReviewModel(ctx: ExtensionContext, ref?: string): NonNullable<ExtensionContext["model"]> {
+	let model = ctx.model;
+	if (ref !== undefined) {
+		const { provider, id } = parseModelRef(ref);
+		model = ctx.modelRegistry.find(provider, id);
+		if (!model) throw new Error("Configured security review model is unavailable: " + ref);
+	}
+	if (!model || !ctx.modelRegistry.hasConfiguredAuth(model)) {
+		throw new Error("No authenticated review model; log in to the selected provider and retry");
+	}
+	return model;
+}
 
 export const REVIEW_SYSTEM_PROMPT = `You are an independent, conservative security reviewer of a proposed Pi package update.
 You have NO tools, filesystem, shell, network access, session history, extensions or project instructions.
@@ -50,9 +64,8 @@ export function parseVerdict(text: string, digest: string): Verdict {
 
 /** A separate, fresh, tool-less reviewer conversation; not a child Pi loading arbitrary extensions. */
 export function modelReviewer(ctx: ExtensionContext, record: (data: unknown) => void): Reviewer {
-	return async (payload, digest, signal) => {
-		const model = ctx.model;
-		if (!model || !ctx.modelRegistry.hasConfiguredAuth(model)) throw new Error("No authenticated review model; select a model and retry");
+	return async (payload, digest, signal, reviewModel) => {
+		const model = resolveReviewModel(ctx, reviewModel);
 		// Conservative UTF-8 byte bound; never rely on a provider silently truncating input.
 		if (Buffer.byteLength(payload) + 12_000 > model.contextWindow - 6_000) throw new Error("Review does not fit model context");
 		const timeout = AbortSignal.timeout(180_000);

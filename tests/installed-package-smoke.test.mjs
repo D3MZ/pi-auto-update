@@ -185,6 +185,7 @@ test("loads the packed Pi package in an isolated offline startup smoke", async (
 		assert.ok(extension, "expected the extension to load from the installed package tarball");
 		assert.equal(extension.handlers.get("session_start")?.length, 1);
 		assert.equal(typeof extension.commands.get("auto-update-now")?.handler, "function");
+		assert.equal(typeof extension.commands.get("auto-update-model")?.handler, "function");
 
 		const notifications = [];
 		const statuses = [];

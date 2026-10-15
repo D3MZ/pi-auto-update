@@ -5,9 +5,11 @@ import { run, type Runner } from "./process.ts";
 import { parseVerdict, type Reviewer } from "./review.ts";
 import { planTargets, stageTarget, type Target } from "./targets.ts";
 import { changes, hash, reviewPayload, snapshot } from "./tree.ts";
+import { parseAutoUpdateSettings } from "./settings.ts";
 
 export type UpdateReport = {
 	started: string;
+	reviewModel?: string;
 	notices: string[];
 	results: { target: string; status: "updated" | "unchanged" | "blocked"; reason?: string;
 		baseline?: string; candidate?: string; verdict?: unknown; backup?: string }[];
@@ -15,6 +17,8 @@ export type UpdateReport = {
 export type GateOptions = {
 	agentDir: string; reviewer: Reviewer; signal: AbortSignal;
 	runner?: Runner; platform?: NodeJS.Platform; status?: (message: string) => void;
+	/** Populated only from the same personal settings snapshot bound to this run. */
+	reviewModel?: string;
 };
 export const safeMessage = (error: unknown) => (error instanceof Error ? error.message : String(error))
 	.replace(/[\x00-\x1f\x7f-\x9f]/g, " ").slice(0, 500);
@@ -60,7 +64,7 @@ export async function updateTarget(target: Target, work: string, options: GateOp
 		const livePhysical = await snapshot(target.live, true);
 		options.status?.("Security review: " + target.label);
 		signal.throwIfAborted();
-		const verdict = await reviewer(reviewPayload(target.label, baseline, candidate), candidate.digest, signal);
+		const verdict = await reviewer(reviewPayload(target.label, baseline, candidate), candidate.digest, signal, options.reviewModel);
 		// Re-validate even injected reviewer implementations; don't trust a truthy approval.
 		result.verdict = parseVerdict(JSON.stringify(verdict), candidate.digest);
 		if (verdict.decision !== "approve" || !verdict.complete || verdict.findings.length) throw new Error("Security reviewer blocked the update");
@@ -108,8 +112,10 @@ export async function runSecurityUpdates(options: GateOptions): Promise<{ report
 		runDir = path.join(state, randomUUID());
 		await mkdir(runDir, { mode: 0o700 });
 		const settingsBytes = await readFile(path.join(agent, "settings.json"));
-		const plan = planTargets(agent, JSON.parse(settingsBytes.toString("utf8")));
-		const report: UpdateReport = { started: new Date().toISOString(), notices: plan.notices, results: [] };
+		const settings = JSON.parse(settingsBytes.toString("utf8"));
+		const plan = planTargets(agent, settings);
+		options = { ...options, reviewModel: parseAutoUpdateSettings(settings.autoUpdate).reviewModel };
+		const report: UpdateReport = { started: new Date().toISOString(), reviewModel: options.reviewModel ?? "current", notices: plan.notices, results: [] };
 		if (plan.targets.length && (options.platform ?? process.platform) === "win32") {
 			throw new Error("Windows automatic promotion is deferred while Pi may hold package files open");
 		}

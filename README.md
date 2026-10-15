@@ -58,7 +58,7 @@ flowchart TD
 ```
 
 **The reviewer is a separate AI conversation, not an unrestricted child Pi
-process.** It uses the current Pi model and its configured authentication, with
+process.** It uses the configured review model (or the current Pi model by default) and Pi authentication, with
 no tools, loaded candidate extensions, skills, project instructions, shell, or
 conversation history. It compares behavior against the installed baseline and
 checks source, manifests, and changed transitive dependency files.
@@ -133,6 +133,48 @@ concurrent checks are coalesced and use a cross-process lock.
 
 **Restart Pi after an approved update.** The current process may still have old
 modules in memory.
+
+## Configure the review model
+
+The review model is independent of your normal chat model. Set it inside Pi:
+
+```text
+/auto-update-model openai-codex/gpt-6-luna
+```
+
+View the current setting with `/auto-update-model`. Use
+`/auto-update-model current` to follow the active chat model again. Commands
+validate that an exact chat model exists and its provider has configured
+credentials before saving. They do not make an inference request.
+
+Or add this **personal-only** setting to `<agent-dir>/settings.json`
+(default `~/.pi/agent/settings.json`), preserving the other settings:
+
+```json
+{
+  "autoUpdate": {
+    "reviewModel": "openai-codex/gpt-6-luna"
+  }
+}
+```
+
+`autoUpdate.reviewModel` takes an exact `provider/model` ID, including nested
+model IDs such as `openrouter/anthropic/claude-sonnet-5`. Omit it or set it to
+`"current"` to use the active chat model. Unknown, malformed or unauthenticated
+selections **block reviews**; they never fall back to another model/provider.
+Project settings cannot choose the reviewer. Changing the personal settings
+during a review invalidates its approval.
+
+For a Codex/ChatGPT subscription, sign in with `/login` → `openai-codex` and
+choose `openai-codex/gpt-6-luna`, the newest Luna chat model currently listed
+in Pi. It uses the existing OAuth subscription login, not an OpenRouter or
+OpenAI API key. Future model revisions require an explicit configuration change.
+The separate `openai` Decisions API classifier with the same model ID is not
+used by this extension.
+
+Model selection changes neither `defaultProvider`/`defaultModel` nor the current
+chat. Actual review requests consume the selected provider’s usual quota/cost.
+Reports record the configured model; session usage entries record the actual model.
 
 ## Reports, recovery, and security boundaries
 

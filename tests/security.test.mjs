@@ -220,6 +220,25 @@ test("potential credential files are not sent to the review provider", async (t)
 	assert.equal(f.payloads.length, 0);
 });
 
+test("the gate binds the review model to the personal settings snapshot, not caller/project overrides", async (t) => {
+	const f = await fixture(t);
+	await json(path.join(f.agent, "settings.json"), { packages: ["npm:demo"], autoUpdate: { reviewModel: "openai-codex/gpt-6-luna" } });
+	let received;
+	const { report } = await runSecurityUpdates({ ...f.options, reviewModel: "wrong/model", reviewer: async (_payload, digest, _signal, model) => {
+		received = model; return approve(digest);
+	} });
+	assert.equal(report.results[0].status, "updated");
+	assert.equal(received, "openai-codex/gpt-6-luna");
+	assert.equal(report.reviewModel, received);
+});
+
+test("invalid model settings fail closed before staging or any network operation", async (t) => {
+	const f = await fixture(t);
+	await json(path.join(f.agent, "settings.json"), { packages: ["npm:demo"], autoUpdate: { reviewModel: "unqualified-name" } });
+	await assert.rejects(runSecurityUpdates(f.options), /exact provider\/model/);
+	assert.equal(f.calls.length, 0);
+});
+
 test("strict verdict parser does not extract fenced/embedded JSON or accept extra fields", () => {
 	const value = approve("digest");
 	assert.deepEqual(parseVerdict(JSON.stringify(value), "digest"), value);
