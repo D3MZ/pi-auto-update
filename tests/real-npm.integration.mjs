@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { access, mkdir, mkdtemp, readFile, readlink, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -9,7 +9,7 @@ import { modelReviewer } from "../extensions/security/review.ts";
 import { snapshot } from "../extensions/security/tree.ts";
 
 // Explicit opt-in: real public-registry network traffic, no paid model inference or personal updates.
-test("real npm resolve/ci/audit + reviewer adapter + exact promotion, without lifecycle execution", {
+test("real npm resolve/ci/audit + reviewer adapter + exact promotion preserves CLI links without lifecycle execution", {
 	skip: process.platform === "win32", timeout: 120_000,
 }, async (t) => {
 	const root = await mkdtemp(path.join(tmpdir(), "real-npm-gate-"));
@@ -17,7 +17,7 @@ test("real npm resolve/ci/audit + reviewer adapter + exact promotion, without li
 	const agent = path.join(root, "agent"), live = path.join(agent, "npm");
 	await mkdir(live, { recursive: true });
 	await writeFile(path.join(agent, "settings.json"), '{"packages":["npm:is-number"]}');
-	const manifest = { private: true, dependencies: { "is-number": "6.0.0" }, scripts: {
+	const manifest = { private: true, dependencies: { "is-number": "6.0.0", acorn: "8.14.0" }, scripts: {
 		preinstall: "node -e \"require('fs').writeFileSync('LIFECYCLE_RAN','bad')\"",
 		install: "node -e \"require('fs').writeFileSync('LIFECYCLE_RAN','bad')\"",
 		postinstall: "node -e \"require('fs').writeFileSync('LIFECYCLE_RAN','bad')\"",
@@ -25,6 +25,9 @@ test("real npm resolve/ci/audit + reviewer adapter + exact promotion, without li
 	await writeFile(path.join(live, "package.json"), JSON.stringify(manifest));
 	const signal = new AbortController().signal;
 	await npm(run, ["install", "--ignore-scripts", "--legacy-peer-deps", "--no-audit", "--no-fund"], live, signal);
+	const binPath = "node_modules/.bin/acorn";
+	const binTarget = await readlink(path.join(live, binPath));
+	assert.equal(binTarget, "../acorn/bin/acorn");
 	let reviewCount = 0;
 	const reviewer = modelReviewer({
 		model: { provider: "fixture", id: "scripted-security-review", contextWindow: 200_000 },
@@ -46,6 +49,9 @@ test("real npm resolve/ci/audit + reviewer adapter + exact promotion, without li
 	assert.equal(report.results[0].status, "updated", JSON.stringify(report));
 	assert.equal(reviewCount, 1);
 	assert.equal((await snapshot(live)).digest, report.results[0].candidate);
+	assert.equal(await readlink(path.join(live, binPath)), binTarget);
+	assert.equal(await readlink(path.join(report.results[0].backup, binPath)), binTarget);
+	assert.equal(await realpath(path.join(live, binPath)), await realpath(path.join(live, "node_modules/acorn/bin/acorn")));
 	assert.equal(JSON.parse(await readFile(path.join(live, "node_modules/is-number/package.json"), "utf8")).version, "7.0.0");
 	await assert.rejects(access(path.join(live, "LIFECYCLE_RAN")), { code: "ENOENT" });
 	await assert.rejects(access(path.join(report.results[0].backup, "LIFECYCLE_RAN")), { code: "ENOENT" });

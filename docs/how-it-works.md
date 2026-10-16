@@ -81,7 +81,11 @@ For a Git target with no runtime dependencies, the install/audit steps are
 unnecessary; all changed source/manifests still pass the reviewer.
 
 The candidate digest covers installed file paths, file modes, symlink targets,
-and file contents (including dependencies). Git's own generated metadata is
+and file contents (including dependencies). Freezing preserves symlink targets
+verbatim, so normal relative npm `.bin` links stay inside the frozen/promoted tree
+and retain the candidate digest. Absolute links, relative escapes, and escaping
+link chains remain blocked; changing a frozen link invalidates approval.
+Git's own generated metadata is
 excluded from the model's source diff, but included in the final anti-tampering
 check. Git hooks are disabled in commands and in the promoted clone.
 Nested `.git` directories inside packages are not omitted from source review.

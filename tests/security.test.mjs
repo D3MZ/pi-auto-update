@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { chmod, mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, readdir, readlink, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -69,6 +69,82 @@ test("approved full-tree update promotes exactly reviewed files and retains back
 	assert.ok(f.payloads[0].manifests.some((entry) => entry.path === "node_modules/demo/package.json"));
 	assert.equal(JSON.parse(await readFile(reportPath, "utf8")).results[0].status, "updated");
 	await assert.rejects(readFile(path.join(f.agent, ".auto-update-security.lock")), { code: "ENOENT" });
+});
+
+async function binFixture(t, target) {
+	const f = await fixture(t);
+	const link = "node_modules/.bin/demo";
+	const originalTarget = "../demo/index.js";
+	await mkdir(path.join(f.live, "node_modules/.bin"));
+	await symlink(originalTarget, path.join(f.live, link));
+	const runner = async (command, args, cwd, signal) => {
+		const result = await f.runner(command, args, cwd, signal);
+		if (args.includes("ci")) {
+			await mkdir(path.join(cwd, "node_modules/.bin"));
+			await symlink(target ? await target(cwd, f) : originalTarget, path.join(cwd, link));
+		}
+		return result;
+	};
+	return { ...f, link, originalTarget, options: { ...f.options, runner } };
+}
+
+test("freezing and promotion preserve npm CLI symlinks and the exact reviewed digest", { skip: process.platform === "win32" }, async (t) => {
+	const f = await binFixture(t);
+	let callsAtReview;
+	const { report } = await runSecurityUpdates({ ...f.options, reviewer: async (payload, digest) => {
+		const frozen = path.join(f.stage(), "..", "approved");
+		assert.equal(await readlink(path.join(frozen, f.link)), f.originalTarget);
+		assert.equal((await snapshot(frozen)).digest, digest);
+		callsAtReview = f.calls.length;
+		return f.reviewer(payload, digest);
+	} });
+	const result = report.results[0];
+	assert.equal(result.status, "updated", JSON.stringify(report));
+	assert.equal(f.payloads.length, 1);
+	assert.equal(f.calls.length, callsAtReview, "no resolver or install after review");
+	assert.equal(await readlink(path.join(f.live, f.link)), f.originalTarget);
+	assert.equal(await readlink(path.join(result.backup, f.link)), f.originalTarget);
+	assert.equal(await realpath(path.join(f.live, f.link)), await realpath(path.join(f.live, "node_modules/demo/index.js")));
+	assert.equal((await snapshot(f.live)).digest, result.candidate);
+	assert.match(await readFile(path.join(f.live, f.link), "utf8"), /version = 2/);
+	assert.match(await readFile(path.join(result.backup, f.link), "utf8"), /version = 1/);
+});
+
+test("absolute, relative escaping and chained escaping npm links still block before review", { skip: process.platform === "win32" }, async (t) => {
+	for (const target of [
+		async (cwd) => path.join(cwd, "node_modules/demo/index.js"),
+		async (cwd, f) => path.relative(path.join(cwd, "node_modules/.bin"), path.join(f.agent, "settings.json")),
+		async (cwd, f) => {
+			await symlink(path.relative(path.join(cwd, "node_modules/demo"), path.join(f.agent, "settings.json")),
+				path.join(cwd, "node_modules/demo/redirect"));
+			return "../demo/redirect";
+		},
+	]) {
+		const f = await binFixture(t, target);
+		const baseline = (await snapshot(f.live)).digest;
+		const { report } = await runSecurityUpdates(f.options);
+		assert.equal(report.results[0].status, "blocked");
+		assert.match(report.results[0].reason, /escaping symlink/);
+		assert.equal(f.payloads.length, 0);
+		assert.equal((await snapshot(f.live)).digest, baseline);
+	}
+});
+
+test("symlink target tampering in the frozen candidate invalidates approval", { skip: process.platform === "win32" }, async (t) => {
+	const f = await binFixture(t);
+	const baseline = (await snapshot(f.live)).digest;
+	let reviewed = false;
+	const { report } = await runSecurityUpdates({ ...f.options, reviewer: async (_payload, digest) => {
+		reviewed = true;
+		const frozenLink = path.join(f.stage(), "..", "approved", f.link);
+		await rm(frozenLink);
+		await symlink("../demo/package.json", frozenLink);
+		return approve(digest);
+	} });
+	assert.equal(reviewed, true);
+	assert.equal(report.results[0].status, "blocked");
+	assert.match(report.results[0].reason, /Reviewed candidate changed/);
+	assert.equal((await snapshot(f.live)).digest, baseline);
 });
 
 for (const [name, reviewer] of [

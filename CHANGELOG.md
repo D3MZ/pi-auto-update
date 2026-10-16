@@ -13,6 +13,10 @@
 - Replace unconditional updater commands with a fail-closed gate. Pi-core, project-local, Windows, and unsupported update types are deferred; AI approval is not a vulnerability-free guarantee.
 - Run automatic checks silently in the background without delaying startup or showing footer status/notifications; retain saved results and errors, manual-command feedback, coalescing, and shutdown cancellation.
 
+### Fixed
+
+- Preserve relative npm CLI symlinks when freezing reviewed candidates, avoiding false escaping-symlink blocks without weakening path or digest checks.
+
 ## [0.1.7] - 2026-10-12
 
 ### Changed

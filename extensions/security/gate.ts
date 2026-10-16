@@ -57,8 +57,8 @@ export async function updateTarget(target: Target, work: string, options: GateOp
 		const diff = changes(baseline, candidate);
 		if (!diff.length) { result.status = "unchanged"; return result; }
 		result.candidate = candidate.digest;
-		// Freeze separately from any child process's cwd before asking the model.
-		await cp(stage, frozen, { recursive: true, dereference: false });
+		// Freeze separately without rewriting relative npm .bin links into absolute staging paths.
+		await cp(stage, frozen, { recursive: true, dereference: false, verbatimSymlinks: true });
 		const physical = await snapshot(frozen, true);
 		if ((await snapshot(frozen)).digest !== candidate.digest) throw new Error("Staged files changed while freezing");
 		const livePhysical = await snapshot(target.live, true);
