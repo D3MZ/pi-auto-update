@@ -24,9 +24,9 @@ Pi Auto Update stages supported personal package updates, scans their dependenci
 - Configurable review model via `autoUpdate.reviewModel` or `/auto-update-model`, using existing Pi credentials, including Codex OAuth.
 - Fail-closed checks: findings, incomplete reviews, scan failures, oversized changes, and tampering block updates; no unchecked updater fallback.
 - Exact reviewed-file promotion, retained backups, and JSON review reports.
-- Automatically runs once per Pi process, not again after `/reload`, `/new`, `/resume`, or `/fork`.
+- Automatically runs once per Pi process, silently in the background without delaying startup or showing footer status/notifications; not again after `/reload`, `/new`, `/resume`, or `/fork`.
 - `PI_AUTO_UPDATE=0` disables startup checks; `PI_OFFLINE=1` blocks automatic and manual network updates.
-- Provides `/auto-update-now` for an explicit check and reports failures without aborting startup.
+- Provides `/auto-update-now` for an explicit check with result/failure feedback, joining any check already running. Automatic results and failures are recorded without UI messages.
 
 **Scope change:** personal managed npm and clean, unpinned GitHub packages on macOS/Linux only. Pi-core, project-local, Windows, custom package managers, private registries, and unsupported sources are deferred. Configured versions/refs are not advanced. Git runtime dependencies require a complete npm lockfile; dirty checkouts, custom attributes, symlinks/submodules, and bundled/workspace dependencies require manual handling. See [execution details and limits](docs/how-it-works.md).
 
@@ -64,7 +64,7 @@ pi -e npm:pi-auto-update
 
 ## Quick start
 
-After installation, restart Pi. Startup checks stage supported targets, audit dependencies, review complete changes, and promote only approved files. Restart Pi again after an approved update to load the new code.
+After installation, restart Pi. Startup checks run silently in the background: they stage supported targets, audit dependencies, review complete changes, and promote only approved files. You can use Pi immediately. Check saved reports or run `/auto-update-now` for feedback. Restart Pi after an approved update to load the new code.
 
 Run the same security-gated check manually at any time:
 

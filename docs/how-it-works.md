@@ -40,6 +40,13 @@ It never asks an AI to assess either command or its downloaded code.
 
 ## Security gate: one supported target
 
+Automatic startup checks are launched without awaiting them, so Pi is usable
+immediately. They do not write footer status or notifications, including for
+skips, blocked updates, or failures. Reports and session entries retain results;
+failures before a report is available are saved as `auto-update-security-error`
+session entries. `/auto-update-now` joins an active check or starts one and shows
+its result or failure. Shutdown cancels active work and waits for cleanup.
+
 ```mermaid
 sequenceDiagram
     participant Host as Pi / extension
@@ -66,7 +73,7 @@ sequenceDiagram
         Host->>Disk: Journal paths; rename baseline to backup
         Host->>Stage: Rename frozen artifact to installed location
         Note over Host,Disk: No re-resolution/download after approval
-        Host-->>Host: Persist report; advise restart
+        Host-->>Host: Persist report (manual command also advises restart)
     end
 ```
 
