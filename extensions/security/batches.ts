@@ -152,6 +152,28 @@ export function verifyReviewPlan(plan: ReviewPlan, before: Snapshot, after: Snap
 	}
 }
 
+/** Exact, explicitly bounded source context for integration; full streams were reviewed in source batches. */
+function integrationContext(plan: ReviewPlan, before: Snapshot, after: Snapshot) {
+	return inventory(plan).map((file) => ({ path: file.path, changeWindow: file.changeWindow,
+		...Object.fromEntries((["before", "after"] as const).map((side) => {
+			const entry = (side === "before" ? before : after).files.get(file.path);
+			if (!entry) return [side, null];
+			const text = entry.text!;
+			const [start, end] = file.changeWindow?.[side] ?? [0, text.length];
+			let ranges = [[Math.max(0, start - 256), Math.min(text.length, end + 256)]];
+			if (ranges[0][1] - ranges[0][0] > 1_024) ranges = [
+				[Math.max(0, start - 256), Math.min(text.length, start + 256)],
+				[Math.max(0, end - 256), Math.min(text.length, end + 256)],
+			];
+			return [side, { fullChangeWindowIncluded: ranges.length === 1, excerpts: ranges.map(([a, b]) => {
+				if (a > 0 && /[\\uDC00-\\uDFFF]/.test(text[a])) a--;
+				if (b < text.length && /[\\uD800-\\uDBFF]/.test(text[b - 1])) b++;
+				return { start: a, end: b, total: text.length, text: text.slice(a, b) };
+			}) }];
+		})),
+	}));
+}
+
 async function checkedReview(reviewer: Reviewer, packet: { payload: string; binding: string }, signal: AbortSignal, model?: string): Promise<Verdict> {
 	signal.throwIfAborted();
 	let abort: (() => void) | undefined;
@@ -201,7 +223,8 @@ export async function reviewChangeSet(
 		batches: plan.batches.length + 1, coverageVerified: true });
 	record(evidence);
 	// Reserve space for every batch's evidence in the final cross-file review, without truncation.
-	const summaryLimit = Math.min(2_000, Math.floor((limit - bytes(inventory(plan)) - 8_192) / MAX_REVIEW_BATCHES) - 256);
+	const contexts = integrationContext(plan, before, after);
+	const summaryLimit = Math.min(2_000, Math.floor((limit - bytes(inventory(plan)) - bytes(contexts) - 8_192) / MAX_REVIEW_BATCHES) - 256);
 	if (summaryLimit < 128) throw new Error("Cross-batch evidence cannot fit model context");
 	const approvals: { batch: number; binding: string; reason: string }[] = [];
 	for (const [i, units] of plan.batches.entries()) {
@@ -214,7 +237,7 @@ export async function reviewChangeSet(
 	const final = bindPacket({
 		protocol: "bounded-review-v1", kind: "integration", label, baseline: before.digest, candidateTree: after.digest,
 		planDigest: plan.digest, coverageVerified: true, files: plan.files.length, parts: plan.batches.flat().length,
-		batches: plan.batches.length, changeInventory: inventory(plan), approvals,
+		batches: plan.batches.length, changeInventory: inventory(plan), sourceContext: contexts, approvals,
 	}, limit);
 	return ask("integration", final);
 }
