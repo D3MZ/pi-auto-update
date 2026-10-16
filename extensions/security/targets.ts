@@ -54,7 +54,7 @@ export function validateLock(lock: Json): void {
 		if (!/^node_modules\//.test(name) || name.split("/").some((part) => part === ".." || part === ".") ||
 			!entry || typeof entry !== "object" || entry.link || entry.inBundle || typeof entry.version !== "string" ||
 			typeof entry.resolved !== "string" || typeof entry.integrity !== "string" ||
-			!/^sha512-[A-Za-z0-9+/]+={0,2}$/.test(entry.integrity)) throw new Error("Unverifiable dependency in lockfile");
+			!/^sha512-[A-Za-z0-9+/]+={0,2}$/.test(entry.integrity)) throw new Error("Unverifiable dependency in lockfile: " + name.slice(0, 200));
 		const url = new URL(entry.resolved);
 		if (url.origin !== REGISTRY || url.username || url.password || !url.pathname.endsWith(".tgz") || url.search || url.hash) {
 			throw new Error("Only integrity-pinned public npm registry tarballs are supported");
