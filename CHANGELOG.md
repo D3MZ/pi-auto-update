@@ -18,6 +18,12 @@
 - Preserve relative npm CLI symlinks when freezing reviewed candidates, avoiding false escaping-symlink blocks without weakening path or digest checks.
 - Replace oversized single-payload rejection with bounded, lossless reviews of all required source/manifests and a final cross-batch review. Verify complete coverage, bind each approval to its packet, cap requests/time, and reject partial approvals before promotion.
 
+## [0.1.8] - 2026-10-16
+
+### Changed
+
+- Pin the development Pi SDK to 1.2.0 and verify the extension against the actual Pi host.
+
 ## [0.1.7] - 2026-10-12
 
 ### Changed

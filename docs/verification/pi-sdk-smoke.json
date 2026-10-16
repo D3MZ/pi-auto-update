@@ -2,13 +2,13 @@
   "schema_version": 1,
   "verification_contract": "pi-sdk-security-gate-v3",
   "sdk_versions": {
-    "@earendil-works/pi-agent-core": "1.1.0",
-    "@earendil-works/pi-ai": "1.1.0",
-    "@earendil-works/pi-coding-agent": "1.1.0",
-    "@earendil-works/pi-tui": "1.1.0"
+    "@earendil-works/pi-agent-core": "1.2.0",
+    "@earendil-works/pi-ai": "1.2.0",
+    "@earendil-works/pi-coding-agent": "1.2.0",
+    "@earendil-works/pi-tui": "1.2.0"
   },
   "platform": "darwin",
-  "head_sha": "e728c81d822cb6d08c627df860d970a072ce4ac5",
+  "head_sha": "6f4c8d34c47a8030c1d442206f2898d42ca2756d",
   "node_version": "v25.1.0",
   "model_inference": "none; actual Pi CLI/RPC and package extension lifecycle, with an isolated empty Pi agent directory",
   "unhandled_errors": 0,
@@ -48,7 +48,7 @@
       "command": "npm run smoke:pi",
       "exit_code": 0,
       "passed": true,
-      "evidence": "{\"id\":\"inventory\",\"type\":\"response\",\"command\":\"get_commands\",\"success\":true,\"data\":{\"commands\":[{\"name\":\"auto-update-model\",\"description\":\"Show or set the independent review model: provider/model or current\",\"source\":\"extension\",\"sourceInfo\":{\"path\":\"<isolated-temp>/agent/npm/node_modules/pi-auto-update/extensions/auto-update.ts\",\"source\":\"cli\",\"scope\":\"temporary\",\"origin\":\"top-level\"}},{\"name\":\"auto-update-now\",\"description\":\"Stage, scan and independently review supported package changes; install only approved bytes\",\"source\":\"extension\",\"sourceInfo\":{\"path\":\"<isolated-temp>/agent/npm/node_modules/pi-auto-update/extensions/auto-update.ts\",\"source\":\"cli\",\"scope\":\"temporary\",\"origin\":\"top-level\"}}]}}\n{\"type\":\"entry_appended\",\"entry\":{\"type\":\"custom\",\"customType\":\"auto-update-security-report\",\"data\":{\"report\":{\"started\":\"2026-10-16T16:32:19.610Z\",\"reviewModel\":\"current\",\"notices\":[\"Pi core and project-local packages deferred: no verified promotion adapter\"],\"results\":[]},\"reportPath\":\"/private<isolated-temp>/agent/auto-update-security/reports/7fc6cd49-9050-4db6-af84-e95a9822d150.json\"},\"id\":\"bd2f26cd\",\"parentId\":\"e3179e44\",\"timestamp\":\"2026-10-16T16:32:19.611Z\"}}\n{\"type\":\"extension_ui_request\",\"method\":\"notify\",\"message\":\"Pi security update completed: 0 updated, 0 blocked\\nPi core and project-local packages deferred: no verified promotion adapter\\nReport: /private<isolated-temp>/agent/auto-update-security/reports/7fc6cd49-9050-4db6-af84-e95a9822d150.json\",\"notifyType\":\"info\"}\n{\"id\":\"feature\",\"type\":\"response\",\"command\":\"prompt\",\"success\":true,\"data\":{\"disposition\":\"handled\"}}\n\n",
+      "evidence": "{\"id\":\"inventory\",\"type\":\"response\",\"command\":\"get_commands\",\"success\":true,\"data\":{\"commands\":[{\"name\":\"auto-update-model\",\"description\":\"Show or set the independent review model: provider/model or current\",\"source\":\"extension\",\"sourceInfo\":{\"path\":\"<isolated-temp>/agent/npm/node_modules/pi-auto-update/extensions/auto-update.ts\",\"source\":\"cli\",\"scope\":\"temporary\",\"origin\":\"top-level\"}},{\"name\":\"auto-update-now\",\"description\":\"Stage, scan and independently review supported package changes; install only approved bytes\",\"source\":\"extension\",\"sourceInfo\":{\"path\":\"<isolated-temp>/agent/npm/node_modules/pi-auto-update/extensions/auto-update.ts\",\"source\":\"cli\",\"scope\":\"temporary\",\"origin\":\"top-level\"}}]}}\n{\"type\":\"entry_appended\",\"entry\":{\"type\":\"custom\",\"customType\":\"auto-update-security-report\",\"data\":{\"report\":{\"started\":\"2026-10-16T19:02:43.793Z\",\"reviewModel\":\"current\",\"notices\":[\"Pi core and project-local packages deferred: no verified promotion adapter\"],\"results\":[]},\"reportPath\":\"/private<isolated-temp>/agent/auto-update-security/reports/9e4efebe-32b5-4a60-a8b4-9423075d09ee.json\"},\"id\":\"5afa2e27\",\"parentId\":\"8cec23c4\",\"timestamp\":\"2026-10-16T19:02:43.795Z\"}}\n{\"type\":\"extension_ui_request\",\"method\":\"notify\",\"message\":\"Pi security update completed: 0 updated, 0 blocked\\nPi core and project-local packages deferred: no verified promotion adapter\\nReport: /private<isolated-temp>/agent/auto-update-security/reports/9e4efebe-32b5-4a60-a8b4-9423075d09ee.json\",\"notifyType\":\"info\"}\n{\"id\":\"feature\",\"type\":\"response\",\"command\":\"prompt\",\"success\":true,\"data\":{\"disposition\":\"handled\"}}\n\n",
       "assertions": [
         {
           "id": "feature_response",
@@ -78,7 +78,7 @@
               {
                 "type": "extension_ui_request",
                 "method": "notify",
-                "message": "Pi security update completed: 0 updated, 0 blocked\nPi core and project-local packages deferred: no verified promotion adapter\nReport: /private<isolated-temp>/agent/auto-update-security/reports/7fc6cd49-9050-4db6-af84-e95a9822d150.json",
+                "message": "Pi security update completed: 0 updated, 0 blocked\nPi core and project-local packages deferred: no verified promotion adapter\nReport: /private<isolated-temp>/agent/auto-update-security/reports/9e4efebe-32b5-4a60-a8b4-9423075d09ee.json",
                 "notifyType": "info"
               }
             ],
@@ -93,7 +93,7 @@
       "command": "npm run smoke:pi",
       "exit_code": 0,
       "passed": true,
-      "evidence": "{\"id\":\"inventory\",\"type\":\"response\",\"command\":\"get_commands\",\"success\":true,\"data\":{\"commands\":[{\"name\":\"auto-update-model\",\"description\":\"Show or set the independent review model: provider/model or current\",\"source\":\"extension\",\"sourceInfo\":{\"path\":\"<isolated-temp>/agent/npm/node_modules/pi-auto-update/extensions/auto-update.ts\",\"source\":\"cli\",\"scope\":\"temporary\",\"origin\":\"top-level\"}},{\"name\":\"auto-update-now\",\"description\":\"Stage, scan and independently review supported package changes; install only approved bytes\",\"source\":\"extension\",\"sourceInfo\":{\"path\":\"<isolated-temp>/agent/npm/node_modules/pi-auto-update/extensions/auto-update.ts\",\"source\":\"cli\",\"scope\":\"temporary\",\"origin\":\"top-level\"}}]}}\n{\"type\":\"entry_appended\",\"entry\":{\"type\":\"custom\",\"customType\":\"auto-update-security-error\",\"data\":{\"reason\":\"offline mode\"},\"id\":\"467713c9\",\"parentId\":\"2cd90a26\",\"timestamp\":\"2026-10-16T16:32:19.818Z\"}}\n{\"type\":\"extension_ui_request\",\"method\":\"notify\",\"message\":\"Pi security update blocked: offline mode\",\"notifyType\":\"warning\"}\n{\"id\":\"feature\",\"type\":\"response\",\"command\":\"prompt\",\"success\":true,\"data\":{\"disposition\":\"handled\"}}\n\n",
+      "evidence": "{\"id\":\"inventory\",\"type\":\"response\",\"command\":\"get_commands\",\"success\":true,\"data\":{\"commands\":[{\"name\":\"auto-update-model\",\"description\":\"Show or set the independent review model: provider/model or current\",\"source\":\"extension\",\"sourceInfo\":{\"path\":\"<isolated-temp>/agent/npm/node_modules/pi-auto-update/extensions/auto-update.ts\",\"source\":\"cli\",\"scope\":\"temporary\",\"origin\":\"top-level\"}},{\"name\":\"auto-update-now\",\"description\":\"Stage, scan and independently review supported package changes; install only approved bytes\",\"source\":\"extension\",\"sourceInfo\":{\"path\":\"<isolated-temp>/agent/npm/node_modules/pi-auto-update/extensions/auto-update.ts\",\"source\":\"cli\",\"scope\":\"temporary\",\"origin\":\"top-level\"}}]}}\n{\"type\":\"entry_appended\",\"entry\":{\"type\":\"custom\",\"customType\":\"auto-update-security-error\",\"data\":{\"reason\":\"offline mode\"},\"id\":\"7f2ec81c\",\"parentId\":\"c78ae236\",\"timestamp\":\"2026-10-16T19:02:44.005Z\"}}\n{\"type\":\"extension_ui_request\",\"method\":\"notify\",\"message\":\"Pi security update blocked: offline mode\",\"notifyType\":\"warning\"}\n{\"id\":\"feature\",\"type\":\"response\",\"command\":\"prompt\",\"success\":true,\"data\":{\"disposition\":\"handled\"}}\n\n",
       "assertions": [
         {
           "id": "handled_error",
@@ -138,7 +138,7 @@
       "command": "npm run smoke:pi",
       "exit_code": 0,
       "passed": true,
-      "evidence": "First actual Pi process:\n{\"id\":\"inventory\",\"type\":\"response\",\"command\":\"get_commands\",\"success\":true,\"data\":{\"commands\":[{\"name\":\"auto-update-model\",\"description\":\"Show or set the independent review model: provider/model or current\",\"source\":\"extension\",\"sourceInfo\":{\"path\":\"<isolated-temp>/agent/npm/node_modules/pi-auto-update/extensions/auto-update.ts\",\"source\":\"cli\",\"scope\":\"temporary\",\"origin\":\"top-level\"}},{\"name\":\"auto-update-now\",\"description\":\"Stage, scan and independently review supported package changes; install only approved bytes\",\"source\":\"extension\",\"sourceInfo\":{\"path\":\"<isolated-temp>/agent/npm/node_modules/pi-auto-update/extensions/auto-update.ts\",\"source\":\"cli\",\"scope\":\"temporary\",\"origin\":\"top-level\"}}]}}\n\n\nSecond actual Pi process:\n{\"id\":\"inventory\",\"type\":\"response\",\"command\":\"get_commands\",\"success\":true,\"data\":{\"commands\":[{\"name\":\"auto-update-model\",\"description\":\"Show or set the independent review model: provider/model or current\",\"source\":\"extension\",\"sourceInfo\":{\"path\":\"<isolated-temp>/agent/npm/node_modules/pi-auto-update/extensions/auto-update.ts\",\"source\":\"cli\",\"scope\":\"temporary\",\"origin\":\"top-level\"}},{\"name\":\"auto-update-now\",\"description\":\"Stage, scan and independently review supported package changes; install only approved bytes\",\"source\":\"extension\",\"sourceInfo\":{\"path\":\"<isolated-temp>/agent/npm/node_modules/pi-auto-update/extensions/auto-update.ts\",\"source\":\"cli\",\"scope\":\"temporary\",\"origin\":\"top-level\"}}]}}\n{\"type\":\"entry_appended\",\"entry\":{\"type\":\"custom\",\"customType\":\"auto-update-security-report\",\"data\":{\"report\":{\"started\":\"2026-10-16T16:32:20.273Z\",\"reviewModel\":\"current\",\"notices\":[\"Pi core and project-local packages deferred: no verified promotion adapter\"],\"results\":[]},\"reportPath\":\"/private<isolated-temp>/agent/auto-update-security/reports/a0df5b46-364a-44c5-9d0c-3ecb4a299b8c.json\"},\"id\":\"512ddb71\",\"parentId\":\"04f08884\",\"timestamp\":\"2026-10-16T16:32:20.274Z\"}}\n{\"type\":\"extension_ui_request\",\"method\":\"notify\",\"message\":\"Pi security update completed: 0 updated, 0 blocked\\nPi core and project-local packages deferred: no verified promotion adapter\\nReport: /private<isolated-temp>/agent/auto-update-security/reports/a0df5b46-364a-44c5-9d0c-3ecb4a299b8c.json\",\"notifyType\":\"info\"}\n{\"id\":\"feature\",\"type\":\"response\",\"command\":\"prompt\",\"success\":true,\"data\":{\"disposition\":\"handled\"}}\n\n",
+      "evidence": "First actual Pi process:\n{\"id\":\"inventory\",\"type\":\"response\",\"command\":\"get_commands\",\"success\":true,\"data\":{\"commands\":[{\"name\":\"auto-update-model\",\"description\":\"Show or set the independent review model: provider/model or current\",\"source\":\"extension\",\"sourceInfo\":{\"path\":\"<isolated-temp>/agent/npm/node_modules/pi-auto-update/extensions/auto-update.ts\",\"source\":\"cli\",\"scope\":\"temporary\",\"origin\":\"top-level\"}},{\"name\":\"auto-update-now\",\"description\":\"Stage, scan and independently review supported package changes; install only approved bytes\",\"source\":\"extension\",\"sourceInfo\":{\"path\":\"<isolated-temp>/agent/npm/node_modules/pi-auto-update/extensions/auto-update.ts\",\"source\":\"cli\",\"scope\":\"temporary\",\"origin\":\"top-level\"}}]}}\n\n\nSecond actual Pi process:\n{\"id\":\"inventory\",\"type\":\"response\",\"command\":\"get_commands\",\"success\":true,\"data\":{\"commands\":[{\"name\":\"auto-update-model\",\"description\":\"Show or set the independent review model: provider/model or current\",\"source\":\"extension\",\"sourceInfo\":{\"path\":\"<isolated-temp>/agent/npm/node_modules/pi-auto-update/extensions/auto-update.ts\",\"source\":\"cli\",\"scope\":\"temporary\",\"origin\":\"top-level\"}},{\"name\":\"auto-update-now\",\"description\":\"Stage, scan and independently review supported package changes; install only approved bytes\",\"source\":\"extension\",\"sourceInfo\":{\"path\":\"<isolated-temp>/agent/npm/node_modules/pi-auto-update/extensions/auto-update.ts\",\"source\":\"cli\",\"scope\":\"temporary\",\"origin\":\"top-level\"}}]}}\n{\"type\":\"entry_appended\",\"entry\":{\"type\":\"custom\",\"customType\":\"auto-update-security-report\",\"data\":{\"report\":{\"started\":\"2026-10-16T19:02:44.469Z\",\"reviewModel\":\"current\",\"notices\":[\"Pi core and project-local packages deferred: no verified promotion adapter\"],\"results\":[]},\"reportPath\":\"/private<isolated-temp>/agent/auto-update-security/reports/ff5ca308-5d9f-44f8-ab87-f38147b7c4f1.json\"},\"id\":\"555c694c\",\"parentId\":\"70bb4c3d\",\"timestamp\":\"2026-10-16T19:02:44.471Z\"}}\n{\"type\":\"extension_ui_request\",\"method\":\"notify\",\"message\":\"Pi security update completed: 0 updated, 0 blocked\\nPi core and project-local packages deferred: no verified promotion adapter\\nReport: /private<isolated-temp>/agent/auto-update-security/reports/ff5ca308-5d9f-44f8-ab87-f38147b7c4f1.json\",\"notifyType\":\"info\"}\n{\"id\":\"feature\",\"type\":\"response\",\"command\":\"prompt\",\"success\":true,\"data\":{\"disposition\":\"handled\"}}\n\n",
       "assertions": [
         {
           "id": "reloaded_feature_response",
@@ -168,7 +168,7 @@
               {
                 "type": "extension_ui_request",
                 "method": "notify",
-                "message": "Pi security update completed: 0 updated, 0 blocked\nPi core and project-local packages deferred: no verified promotion adapter\nReport: /private<isolated-temp>/agent/auto-update-security/reports/a0df5b46-364a-44c5-9d0c-3ecb4a299b8c.json",
+                "message": "Pi security update completed: 0 updated, 0 blocked\nPi core and project-local packages deferred: no verified promotion adapter\nReport: /private<isolated-temp>/agent/auto-update-security/reports/ff5ca308-5d9f-44f8-ab87-f38147b7c4f1.json",
                 "notifyType": "info"
               }
             ],
@@ -198,16 +198,16 @@
       "command": "npm run smoke:pi",
       "exit_code": 0,
       "passed": true,
-      "evidence": "1.1.0\n\n\n",
+      "evidence": "1.2.0\n\n\n",
       "assertions": [
         {
           "id": "native_shell_boundary",
           "expected": "Native shell prints the pinned Pi version",
           "observed": {
             "exit_code": 0,
-            "stdout": "1.1.0\n",
+            "stdout": "1.2.0\n",
             "stderr": "",
-            "expectedVersion": "1.1.0"
+            "expectedVersion": "1.2.0"
           },
           "passed": true
         }
