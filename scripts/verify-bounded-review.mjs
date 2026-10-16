@@ -4,7 +4,7 @@
  * Usage: node scripts/verify-bounded-review.mjs --agent-dir ~/.pi/agent [--target npm|git]
  *   [--sdk /absolute/path/to/pi/dist/index.js --model openai-codex/gpt-6-luna] --output /tmp/proof.json
  */
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -18,13 +18,25 @@ import { modelReviewer } from "../extensions/security/review.ts";
 
 const { values } = parseArgs({ options: {
 	"agent-dir": { type: "string" }, target: { type: "string", default: "npm" },
-	sdk: { type: "string" }, model: { type: "string" }, output: { type: "string" },
+	sdk: { type: "string" }, model: { type: "string" }, output: { type: "string" }, fixture: { type: "boolean", default: false },
 } });
 if (!values["agent-dir"] || !values.output || (!!values.sdk !== !!values.model)) throw new Error("Provide --agent-dir and --output; live inference requires both --sdk and --model");
 const agent = path.resolve(values["agent-dir"]);
-const target = planTargets(agent, JSON.parse(await readFile(path.join(agent, "settings.json"), "utf8"))).targets.find((target) => target.kind === values.target);
-if (!target) throw new Error("No matching target");
 const root = await mkdtemp(path.join(tmpdir(), "pi-bounded-proof-"));
+let target;
+if (values.fixture) {
+	const live = path.join(root, "synthetic-baseline");
+	await mkdir(live);
+	await mkdir(path.join(root, "candidate"));
+	for (const [directory, version] of [[live, "1.0.0"], [path.join(root, "candidate"), "1.0.1"]]) {
+		await writeFile(path.join(directory, "package.json"), JSON.stringify({ name: "isolated-review-fixture", version, private: true,
+			description: "Documentation for an isolated dependency-free test fixture. ".repeat(4_000) }));
+	}
+	target = { kind: "synthetic", live, label: "Synthetic benign manifest-only version change; no application behavior or dependencies" };
+} else {
+	target = planTargets(agent, JSON.parse(await readFile(path.join(agent, "settings.json"), "utf8"))).targets.find((target) => target.kind === values.target);
+}
+if (!target) { await rm(root, { recursive: true, force: true }); throw new Error("No matching target"); }
 const signal = AbortSignal.timeout(20 * 60_000);
 const baseline = await snapshot(target.live);
 const proof = { schemaVersion: 1, revision: execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim(),
@@ -32,7 +44,7 @@ const proof = { schemaVersion: 1, revision: execFileSync("git", ["rev-parse", "H
 	baseline: baseline.digest, sourceUnchanged: false, promotions: 0 };
 try {
 	const stage = path.join(root, "candidate");
-	await stageTarget(target, stage, baseline, run, signal);
+	if (!values.fixture) await stageTarget(target, stage, baseline, run, signal);
 	const candidate = await snapshot(stage);
 	proof.candidate = candidate.digest;
 	const old = reviewPayload(target.label, baseline, candidate, Number.MAX_SAFE_INTEGER);
