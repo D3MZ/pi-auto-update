@@ -5,9 +5,10 @@ export const MAX_REVIEW_BATCHES = 32;
 const MIN_PACKET_BYTES = 8_192;
 type Entry = NonNullable<Change["before"]>;
 type Meta = Omit<Entry, "text"> & { length: number };
-type File = { path: string; role: "change" | "manifest"; before: Meta | null; after: Meta | null };
+type File = { path: string; role: "change" | "manifest"; before: Meta | null; after: Meta | null;
+	changeWindow: { before: [number, number]; after: [number, number] } | null };
 type Slice = { start: number; end: number; total: number; text: string };
-export type ReviewUnit = { file: number; part: number; parts: number; before: Slice | null; after: Slice | null };
+export type ReviewUnit = { file: number; part: number; parts: number; before: Slice | null; after: Slice | null; unchanged: boolean };
 export type ReviewPlan = {
 	label: string; baseline: string; candidateTree: string; digest: string; limit: number;
 	files: File[]; batches: ReviewUnit[][];
@@ -33,6 +34,18 @@ function records(before: Snapshot, after: Snapshot) {
 		}
 	}
 	return result.sort((a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : 0);
+}
+
+function descriptor(record: ReturnType<typeof records>[number]): File {
+	let changeWindow: File["changeWindow"] = null;
+	if (record.role === "change" && record.before && record.after) {
+		const a = record.before.text!, b = record.after.text!;
+		let prefix = 0, suffix = 0;
+		while (prefix < Math.min(a.length, b.length) && a[prefix] === b[prefix]) prefix++;
+		while (suffix < Math.min(a.length, b.length) - prefix && a[a.length - suffix - 1] === b[b.length - suffix - 1]) suffix++;
+		changeWindow = { before: [prefix, a.length - suffix], after: [prefix, b.length - suffix] };
+	}
+	return { path: record.path, role: record.role, before: meta(record.before), after: meta(record.after), changeWindow };
 }
 
 /** Split by serialized UTF-8 size, retaining every UTF-16 offset and never bisecting a surrogate pair. */
@@ -80,7 +93,7 @@ export function buildReviewPlan(label: string, before: Snapshot, after: Snapshot
 	const source = records(before, after);
 	const plan: ReviewPlan = {
 		label, baseline: before.digest, candidateTree: after.digest, digest: "0".repeat(64), limit,
-		files: source.map((file) => ({ path: file.path, role: file.role, before: meta(file.before), after: meta(file.after) })),
+		files: source.map(descriptor),
 		batches: [],
 	};
 	const overhead = bytes(batchBody(plan, [], MAX_REVIEW_BATCHES, MAX_REVIEW_BATCHES)) + 128;
@@ -92,7 +105,8 @@ export function buildReviewPlan(label: string, before: Snapshot, after: Snapshot
 		const beforeParts = record.before ? slices(record.before.text!, textLimit) : [];
 		const afterParts = record.after ? slices(record.after.text!, textLimit) : [];
 		const parts = Math.max(beforeParts.length, afterParts.length);
-		for (let part = 0; part < parts; part++) units.push({ file, part, parts, before: beforeParts[part] ?? null, after: afterParts[part] ?? null });
+		for (let part = 0; part < parts; part++) units.push({ file, part, parts, before: beforeParts[part] ?? null, after: afterParts[part] ?? null,
+			unchanged: beforeParts[part] !== undefined && afterParts[part] !== undefined && beforeParts[part].text === afterParts[part].text });
 	}
 	let current: ReviewUnit[] = [];
 	for (const unit of units) {
@@ -114,12 +128,13 @@ export function buildReviewPlan(label: string, before: Snapshot, after: Snapshot
 /** Independent reconstruction check: no missing, duplicated, overlapping, reordered or altered content. */
 export function verifyReviewPlan(plan: ReviewPlan, before: Snapshot, after: Snapshot): void {
 	const source = records(before, after);
-	const expected = source.map((file) => ({ path: file.path, role: file.role, before: meta(file.before), after: meta(file.after) }));
+	const expected = source.map(descriptor);
 	if (plan.baseline !== before.digest || plan.candidateTree !== after.digest ||
 		JSON.stringify(plan.files) !== JSON.stringify(expected) ||
 		plan.digest !== hash(JSON.stringify({ ...plan, digest: undefined }))) throw new Error("Review plan binding or file coverage mismatch");
 	const all = plan.batches.flat();
 	if (all.some((unit) => !Number.isInteger(unit.file) || unit.file < 0 || unit.file >= source.length)) throw new Error("Unknown review file");
+	if (all.some((unit) => unit.unchanged !== (unit.before !== null && unit.after !== null && unit.before.text === unit.after.text))) throw new Error("Invalid unchanged-part assertion");
 	for (const [index, record] of source.entries()) {
 		const units = all.filter((unit) => unit.file === index);
 		if (!units.length || units.some((unit, i) => unit.part !== i || unit.parts !== units.length)) throw new Error("Missing or duplicated review part");

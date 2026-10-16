@@ -36,6 +36,9 @@ For protocol bounded-review-v1, candidate is the exact packet approval binding; 
 A batch contains losslessly segmented file parts with offsets, full file descriptors and the global change inventory.
 Review ONLY the supplied parts and manifests. An approval certifies ONLY this batch, not unseen parts or the whole update.
 Other planned parts/files are deliberately reviewed in separate batches. Their absence ALONE is not a finding in this batch.
+The locally verified changeWindow bounds the whole file\'s non-common prefix/suffix region, in UTF-16 offsets.
+A part marked unchanged has identical before/after text. Unchanged middle parts and different whole-file hashes are expected,
+not evidence of obfuscation or an incomplete batch. Assess concrete issues in supplied content; defer other planned regions to integration.
 Record cross-file dependencies or questions in reason for the final integration reviewer; do not claim they are resolved here.
 Block actual concerns in supplied content, or supplied content that cannot be meaningfully assessed even within this limited scope.
 In reason, give compact evidence: paths/capabilities changed, dependency effects, and cross-file interactions relevant to integration.
