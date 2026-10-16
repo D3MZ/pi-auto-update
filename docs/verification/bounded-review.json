@@ -118,6 +118,23 @@
       "outcome": "blocked",
       "sourceUnchanged": true,
       "promotions": 0
+    },
+    {
+      "scenario": "live-installed-updater-permission-only-promotion",
+      "revision": "7368922148d5fd9af5026c5f937f8139dce04b9a",
+      "model": "openai-codex/gpt-6-luna",
+      "requiredRequests": 1,
+      "completed": 1,
+      "packetBytes": [
+        48602
+      ],
+      "decisions": [
+        "approve"
+      ],
+      "outcome": "updated",
+      "artifactDigest": "f5e833695bd8c4a8b167cd647ec700ecb1e5db3f3334b0dd4b5f311f96a0ec05",
+      "installedDigestMatched": true,
+      "scope": "Permission-only reconciliation; not a claim that a dependency update was approved."
     }
   ],
   "note": "Scripted approvals validate mechanics only. Live security-policy-stop details are intentionally not published; no blocked package was promoted by these proofs. The live benign proof passed every source batch and integration. Source paths, code, credentials and user-specific settings are excluded."
