@@ -20,7 +20,7 @@ Pi Auto Update stages supported personal package updates, scans their dependenci
 ## Features
 
 - Script-free staging, integrity-pinned dependencies, and `npm audit` before AI review.
-- Complete changed-file review, including transitive dependencies, with no model tools or parent conversation history.
+- Complete changed-file review, including transitive dependencies, with no model tools or parent conversation history. Large updates use lossless, coverage-checked batches plus a final cross-batch review.
 - Configurable review model via `autoUpdate.reviewModel` or `/auto-update-model`, using existing Pi credentials, including Codex OAuth.
 - Fail-closed checks: findings, incomplete reviews, scan failures, oversized changes, and tampering block updates; no unchecked updater fallback.
 - Exact reviewed-file promotion, retained backups, and JSON review reports.
@@ -72,7 +72,7 @@ Run the same security-gated check manually at any time:
 /auto-update-now
 ```
 
-An authenticated review model is required when changes need review. Package source is sent to that model's configured provider and consumes its normal quota/cost. No package scripts, builds, tests, or candidate extensions are executed during staging. Reviews exceeding 180,000 UTF-8 bytes or the model's context limit require manual handling.
+An authenticated review model is required when changes need review. Package source is sent to that model's configured provider and consumes its normal quota/cost. No package scripts, builds, tests, or candidate extensions are executed during staging. Each request stays within 180,000 UTF-8 bytes and the selected model's conservative context budget. Larger updates are segmented without dropping text, including large files and unchanged candidate manifests. Every source batch and a final integration review must approve before any installation; batch errors/findings block the entire target. Reviews are bounded to 32 source batches plus one integration request and 15 minutes overall; excessive volume or insufficient context still requires manual handling.
 
 Try the local checkout without permanently installing it:
 
@@ -142,6 +142,14 @@ The error case verifies that manual checks cannot bypass offline mode. The smoke
 makes no model requests. CI runs it as part of `npm run ci`. `npm run test:network`
 optionally exercises real public-registry resolution/install/audit with a scripted
 reviewer, without changing installed packages or testing a live model's judgment.
+
+A reproducible, read-only proof can stage/audit real installed updates and verify full coverage without installing them:
+
+```bash
+node scripts/verify-bounded-review.mjs --agent-dir "$HOME/.pi/agent" --output /tmp/bounded-proof.json
+```
+
+This uses scripted approvals to test the mechanism. To explicitly opt into real inference, also pass `--sdk /absolute/path/to/pi/dist/index.js --model openai-codex/gpt-6-luna`. Source is sent to that model and consumes quota. The proof never promotes files; its report distinguishes scripted and live results. Regression tests also prove that a late finding, replayed approval, cancellation, or final-review rejection cannot partially install an update.
 
 ## Release
 

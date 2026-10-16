@@ -6,6 +6,7 @@ type Entry = { kind: "file" | "link"; mode: number; hash: string; text?: string 
 export type Snapshot = { digest: string; files: Map<string, Entry> };
 export type Change = { path: string; before: Entry | null; after: Entry | null };
 export const MAX_REVIEW_BYTES = 180_000;
+export class ReviewSizeError extends Error {}
 export const hash = (value: string | Buffer) => createHash("sha256").update(value).digest("hex");
 
 /** Hash every installed byte, including dependencies. Never follow links while walking. */
@@ -61,12 +62,16 @@ export function changes(before: Snapshot, after: Snapshot): Change[] {
 	return result;
 }
 
-/** Complete old/new contents rather than lossy/truncated diff hunks. */
-export function reviewPayload(label: string, before: Snapshot, after: Snapshot): string {
-	const delta = changes(before, after);
+export function assertReviewable(delta: Change[]): void {
 	if (delta.some((change) => /(^|\/)(\.env(?:\.[^/]*)?|\.npmrc|\.netrc|id_rsa|id_ed25519|auth\.json)$/.test(change.path))) {
 		throw new Error("Potential credential/configuration file changed; manual review required");
 	}
+}
+
+/** Complete old/new contents rather than lossy/truncated diff hunks. */
+export function reviewPayload(label: string, before: Snapshot, after: Snapshot, limit = MAX_REVIEW_BYTES): string {
+	const delta = changes(before, after);
+	assertReviewable(delta);
 	const payload = JSON.stringify({
 		label, baseline: before.digest, candidate: after.digest,
 		manifests: [...after.files].filter(([name]) => /(^|\/)package\.json$/.test(name)).map(([name, entry]) => ({
@@ -74,6 +79,6 @@ export function reviewPayload(label: string, before: Snapshot, after: Snapshot):
 		})),
 		changes: delta,
 	});
-	if (Buffer.byteLength(payload) > MAX_REVIEW_BYTES) throw new Error("Complete review exceeds size limit; manual review required");
+	if (Buffer.byteLength(payload) > limit) throw new ReviewSizeError("Complete review exceeds size limit; manual review required");
 	return payload;
 }

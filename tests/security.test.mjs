@@ -94,7 +94,7 @@ test("freezing and promotion preserve npm CLI symlinks and the exact reviewed di
 	const { report } = await runSecurityUpdates({ ...f.options, reviewer: async (payload, digest) => {
 		const frozen = path.join(f.stage(), "..", "approved");
 		assert.equal(await readlink(path.join(frozen, f.link)), f.originalTarget);
-		assert.equal((await snapshot(frozen)).digest, digest);
+		assert.equal((await snapshot(frozen)).digest, JSON.parse(payload).candidateTree);
 		callsAtReview = f.calls.length;
 		return f.reviewer(payload, digest);
 	} });
@@ -203,13 +203,49 @@ test("cancellation after review blocks promotion", async (t) => {
 	assert.equal(report.results[0].status, "blocked");
 });
 
-test("oversized review and changed binary data are never silently omitted", async (t) => {
-	for (const code of ["a".repeat(200_000), Buffer.from([0, 1, 2, 3])]) {
-		const f = await fixture(t, { code });
-		const { report } = await runSecurityUpdates(f.options);
+test("oversized reviews are covered by bounded batches and a final integration before exact promotion", async (t) => {
+	const code = "a".repeat(200_000);
+	const f = await fixture(t, { code });
+	const { report } = await runSecurityUpdates(f.options);
+	assert.equal(report.results[0].status, "updated", JSON.stringify(report));
+	assert.equal(report.results[0].review.mode, "batched");
+	assert.equal(report.results[0].review.coverageVerified, true);
+	assert.equal(report.results[0].review.completed, report.results[0].review.batches);
+	assert.equal(f.payloads.at(-1).kind, "integration");
+	const parts = f.payloads.filter((p) => p.kind === "batch").flatMap((p) => p.units.map((unit) => ({
+		...unit, path: p.files.find((file) => file.index === unit.file).path,
+	}))).filter((unit) => unit.path === "node_modules/demo/index.js");
+	assert.equal(parts.map((part) => part.after?.text ?? "").join(""), code);
+	assert.equal(await readFile(path.join(f.live, "node_modules/demo/index.js"), "utf8"), code);
+	assert.equal((await snapshot(f.live)).digest, report.results[0].candidate);
+});
+
+for (const failure of ["late-finding", "integration-block", "late-tamper", "late-cancel"]) {
+	test(failure + " after a successful batch never partially promotes a large update", async (t) => {
+		const f = await fixture(t, { code: "a".repeat(400_000) });
+		const original = (await snapshot(f.live)).digest;
+		const controller = new AbortController();
+		let calls = 0;
+		const { report } = await runSecurityUpdates({ ...f.options, signal: controller.signal, reviewer: async (payload, binding) => {
+			const packet = JSON.parse(payload); calls++;
+			if (calls === 2 && failure === "late-finding") return { ...approve(binding), decision: "block", findings: [{ severity: "low", description: "concern" }] };
+			if (packet.kind === "integration" && failure === "integration-block") return { ...approve(binding), decision: "block" };
+			if (calls === 2 && failure === "late-tamper") await writeFile(path.join(f.stage(), "..", "approved", "node_modules/demo/index.js"), "tampered");
+			if (calls === 2 && failure === "late-cancel") controller.abort();
+			assert.equal((await snapshot(f.live)).digest, original, "installation must not start during any review");
+			return approve(binding);
+		} });
+		assert.ok(calls >= 2);
 		assert.equal(report.results[0].status, "blocked");
-		assert.equal(f.payloads.length, 0);
-	}
+		assert.equal((await snapshot(f.live)).digest, original);
+	});
+}
+
+test("changed binary data is still blocked before any review", async (t) => {
+	const f = await fixture(t, { code: Buffer.from([0, 1, 2, 3]) });
+	const { report } = await runSecurityUpdates(f.options);
+	assert.equal(report.results[0].status, "blocked");
+	assert.equal(f.payloads.length, 0);
 });
 
 test("lock blocks competing processes and is never stolen", async (t) => {

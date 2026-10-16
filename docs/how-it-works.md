@@ -90,9 +90,41 @@ excluded from the model's source diff, but included in the final anti-tampering
 check. Git hooks are disabled in commands and in the promoted clone.
 Nested `.git` directories inside packages are not omitted from source review.
 
-The byte/UTF-8 limits are hard stops, not truncation. A response cut short at
-a token limit cannot approve. Every target is independent; a blocked target
-does not grant or revoke approval for another.
+## Bounded review protocol
+
+A small update uses one complete review. Larger updates are split into at most
+32 source batches plus one final integration review. Every request is at most
+180,000 serialized UTF-8 bytes, further reduced for the selected model context.
+The overall review deadline is 15 minutes; each model request also retains its
+three-minute timeout. Excessive volume blocks before inference rather than
+spending unbounded quota.
+
+Every changed before/after text and candidate manifest is included. Large files
+are split with explicit offsets, total lengths, file identities, modes and hashes;
+UTF-16 surrogate pairs are never split. Local verification reconstructs every
+required stream exactly and rejects missing/duplicate/overlapping/reordered or
+altered parts. Unchanged candidate manifests are included once as context.
+
+Source packets carry the baseline/candidate-tree digests, whole-plan digest,
+global change inventory and their own file descriptors. The verdict `candidate`
+field binds the SHA-256 of that exact packet. It is NOT a reusable tree-only
+approval: an approval for batch 1 cannot approve batch 2 or the final review.
+Reports keep the artifact digest in `result.candidate`, and packet bindings,
+byte counts, verdicts and verified coverage in `result.review`.
+
+Every source batch must return complete approval with zero findings. The final
+integration reviewer receives the entire changed-file inventory and bounded
+security/compatibility evidence from every approved batch. It checks cross-file
+interactions and must block if evidence is insufficient. This final pass uses
+model-produced evidence, not a second full-source context: it reduces context
+pressure but does not eliminate model false negatives or prompt injection.
+Evidence is never silently truncated to fit a final request.
+
+No source batch alone authorizes installation. Any finding, incomplete response,
+model/scan error, cancellation, binding mismatch, failed final review, or file
+mutation blocks promotion. Final tree and settings checks still protect the
+exact frozen artifact. Every target is independent; a blocked target does not
+grant approval for another.
 
 ## Limits
 

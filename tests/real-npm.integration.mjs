@@ -17,7 +17,8 @@ test("real npm resolve/ci/audit + reviewer adapter + exact promotion preserves C
 	const agent = path.join(root, "agent"), live = path.join(agent, "npm");
 	await mkdir(live, { recursive: true });
 	await writeFile(path.join(agent, "settings.json"), '{"packages":["npm:is-number"]}');
-	const manifest = { private: true, dependencies: { "is-number": "6.0.0", acorn: "8.14.0" }, scripts: {
+	// Forces the real npm pipeline through segmentation (old planner rejected this manifest).
+	const manifest = { private: true, description: "synthetic oversized manifest context ".repeat(6_000), dependencies: { "is-number": "6.0.0", acorn: "8.14.0" }, scripts: {
 		preinstall: "node -e \"require('fs').writeFileSync('LIFECYCLE_RAN','bad')\"",
 		install: "node -e \"require('fs').writeFileSync('LIFECYCLE_RAN','bad')\"",
 		postinstall: "node -e \"require('fs').writeFileSync('LIFECYCLE_RAN','bad')\"",
@@ -35,7 +36,8 @@ test("real npm resolve/ci/audit + reviewer adapter + exact promotion preserves C
 			hasConfiguredAuth: () => true,
 			streamSimple: (_model, context) => {
 				const payload = JSON.parse(context.messages[0].content[0].text);
-				assert.ok(payload.changes.some((change) => change.path === "node_modules/is-number/index.js"));
+				assert.ok(Buffer.byteLength(context.messages[0].content[0].text) <= 180_000);
+				assert.ok(["batch", "integration"].includes(payload.kind));
 				assert.deepEqual(context.tools, []);
 				reviewCount++;
 				return { result: async () => ({ stopReason: "stop", content: [{ type: "text", text: JSON.stringify({
@@ -47,7 +49,10 @@ test("real npm resolve/ci/audit + reviewer adapter + exact promotion preserves C
 	}, () => {});
 	const { report } = await runSecurityUpdates({ agentDir: agent, signal, reviewer });
 	assert.equal(report.results[0].status, "updated", JSON.stringify(report));
-	assert.equal(reviewCount, 1);
+	assert.ok(reviewCount > 2);
+	assert.equal(report.results[0].review.mode, "batched");
+	assert.equal(report.results[0].review.completed, report.results[0].review.batches);
+	assert.equal(report.results[0].review.coverageVerified, true);
 	assert.equal((await snapshot(live)).digest, report.results[0].candidate);
 	assert.equal(await readlink(path.join(live, binPath)), binTarget);
 	assert.equal(await readlink(path.join(report.results[0].backup, binPath)), binTarget);

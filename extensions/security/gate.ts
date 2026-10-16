@@ -2,9 +2,10 @@ import { cp, lstat, mkdir, open, readFile, realpath, rename, rm, writeFile } fro
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { run, type Runner } from "./process.ts";
-import { parseVerdict, type Reviewer } from "./review.ts";
+import type { Reviewer } from "./review.ts";
+import { reviewChangeSet, type ReviewEvidence } from "./batches.ts";
 import { planTargets, stageTarget, type Target } from "./targets.ts";
-import { changes, hash, reviewPayload, snapshot } from "./tree.ts";
+import { changes, hash, snapshot } from "./tree.ts";
 import { parseAutoUpdateSettings } from "./settings.ts";
 
 export type UpdateReport = {
@@ -12,7 +13,7 @@ export type UpdateReport = {
 	reviewModel?: string;
 	notices: string[];
 	results: { target: string; status: "updated" | "unchanged" | "blocked"; reason?: string;
-		baseline?: string; candidate?: string; verdict?: unknown; backup?: string }[];
+		baseline?: string; candidate?: string; verdict?: unknown; review?: ReviewEvidence; backup?: string }[];
 };
 export type GateOptions = {
 	agentDir: string; reviewer: Reviewer; signal: AbortSignal;
@@ -64,10 +65,8 @@ export async function updateTarget(target: Target, work: string, options: GateOp
 		const livePhysical = await snapshot(target.live, true);
 		options.status?.("Security review: " + target.label);
 		signal.throwIfAborted();
-		const verdict = await reviewer(reviewPayload(target.label, baseline, candidate), candidate.digest, signal, options.reviewModel);
-		// Re-validate even injected reviewer implementations; don't trust a truthy approval.
-		result.verdict = parseVerdict(JSON.stringify(verdict), candidate.digest);
-		if (verdict.decision !== "approve" || !verdict.complete || verdict.findings.length) throw new Error("Security reviewer blocked the update");
+		result.verdict = await reviewChangeSet(target.label, baseline, candidate, reviewer, signal, options.reviewModel,
+			(evidence) => { result.review = evidence; });
 		signal.throwIfAborted();
 		if ((await snapshot(frozen, true)).digest !== physical.digest) throw new Error("Reviewed candidate changed; approval invalidated");
 		if ((await snapshot(target.live, true)).digest !== livePhysical.digest ||
