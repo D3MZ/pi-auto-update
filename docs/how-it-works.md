@@ -106,15 +106,18 @@ required stream exactly and rejects missing/duplicate/overlapping/reordered or
 altered parts. Unchanged candidate manifests are included once as context.
 
 Source packets carry the baseline/candidate-tree digests, whole-plan digest,
-global change inventory and their own file descriptors. The verdict `candidate`
+global change inventory and their own file descriptors. Verified prefix/suffix
+change windows and unchanged-part flags orient cold batch reviewers without
+misrepresenting identical context as a new behavior change. The verdict `candidate`
 field binds the SHA-256 of that exact packet. It is NOT a reusable tree-only
 approval: an approval for batch 1 cannot approve batch 2 or the final review.
 Reports keep the artifact digest in `result.candidate`, and packet bindings,
 byte counts, verdicts and verified coverage in `result.review`.
 
 Every source batch must return complete approval with zero findings. The final
-integration reviewer receives the entire changed-file inventory and bounded
-security/compatibility evidence from every approved batch. It checks cross-file
+integration reviewer receives the entire changed-file inventory, exact bounded
+changed-region source excerpts, and security/compatibility evidence from every
+approved batch. It checks cross-file
 interactions and must block if evidence is insufficient. This final pass uses
 model-produced evidence, not a second full-source context: it reduces context
 pressure but does not eliminate model false negatives or prompt injection.

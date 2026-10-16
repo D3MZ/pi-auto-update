@@ -46,6 +46,12 @@ test("original >180KB rejection becomes lossless bounded coverage including huge
 		return approve(binding);
 	}, new AbortController().signal, undefined, (value) => { evidence = value; });
 	assert.equal(packets.at(-1).kind, "integration");
+	for (const context of packets.at(-1).sourceContext) {
+		for (const side of ["before", "after"]) {
+			const text = (side === "before" ? before : after).files.get(context.path)?.text;
+			for (const excerpt of context[side]?.excerpts ?? []) assert.equal(excerpt.text, text.slice(excerpt.start, excerpt.end));
+		}
+	}
 	assert.equal(evidence.completed, evidence.batches);
 	assert.equal(verdict.decision, "approve");
 	assert.equal(new Set(evidence.packets.map((packet) => packet.binding)).size, packets.length);
@@ -73,6 +79,8 @@ test("coverage verification rejects omissions, duplicates, reordered parts and t
 		(plan) => { plan.batches[0][0].after.text += "hidden"; },
 		(plan) => { plan.batches[0][0].after.start++; },
 		(plan) => { plan.files[0].path = "different"; },
+		(plan) => { plan.batches[0][0].unchanged = !plan.batches[0][0].unchanged; },
+		(plan) => { plan.files.find((file) => file.changeWindow).changeWindow.before[0]++; },
 	]) {
 		const plan = buildReviewPlan("fixture", before, after);
 		tamper(plan); plan.digest = hash(JSON.stringify({ ...plan, digest: undefined }));

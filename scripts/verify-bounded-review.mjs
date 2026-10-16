@@ -47,6 +47,10 @@ try {
 	if (!values.fixture) await stageTarget(target, stage, baseline, run, signal);
 	const candidate = await snapshot(stage);
 	proof.candidate = candidate.digest;
+	if (candidate.digest === baseline.digest) {
+		proof.outcome = "unchanged";
+		proof.liveModel = values.model ?? null;
+	} else {
 	const old = reviewPayload(target.label, baseline, candidate, Number.MAX_SAFE_INTEGER);
 	proof.oldPayloadBytes = Buffer.byteLength(old);
 	try { reviewPayload(target.label, baseline, candidate); proof.oldPlanner = "fits"; }
@@ -75,6 +79,7 @@ try {
 		});
 		proof.outcome = "approved";
 	} catch (error) { proof.outcome = "blocked"; proof.reason = error.message; }
+	}
 	proof.sourceUnchanged = (await snapshot(target.live)).digest === baseline.digest;
 	if (!proof.sourceUnchanged) throw new Error("Source changed during read-only proof; rerun against a stable source");
 } finally {

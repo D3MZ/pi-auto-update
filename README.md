@@ -149,7 +149,7 @@ A reproducible, read-only proof can stage/audit real installed updates and verif
 node scripts/verify-bounded-review.mjs --agent-dir "$HOME/.pi/agent" --output /tmp/bounded-proof.json
 ```
 
-This uses scripted approvals to test the mechanism. To explicitly opt into real inference, also pass `--sdk /absolute/path/to/pi/dist/index.js --model openai-codex/gpt-6-luna`. Source is sent to that model and consumes quota. The proof never promotes files; its report distinguishes scripted and live results. Regression tests also prove that a late finding, replayed approval, cancellation, or final-review rejection cannot partially install an update.
+This uses scripted approvals to test the mechanism. To explicitly opt into real inference, also pass `--sdk /absolute/path/to/pi/dist/index.js --model openai-codex/gpt-6-luna`. Source is sent to that model and consumes quota. The proof never promotes files; its report distinguishes scripted and live results. Add `--fixture` for a benign oversized manifest-only test instead of actual package updates. Regression tests also prove that a late finding, replayed approval, cancellation, or final-review rejection cannot partially install an update.
 
 ## Release
 
