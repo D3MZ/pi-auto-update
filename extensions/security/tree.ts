@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { createReadStream } from "node:fs";
 import { lstat, readdir, readFile, readlink, realpath } from "node:fs/promises";
 import path from "node:path";
 
@@ -7,6 +8,21 @@ export type Snapshot = { digest: string; files: Map<string, Entry> };
 export type Change = { path: string; before: Entry | null; after: Entry | null };
 export const MAX_REVIEW_BYTES = 180_000;
 export class ReviewSizeError extends Error {}
+const MAX_TREE_BYTES = 1024 * 1024 * 1024;
+const MAX_FILE_BYTES = 256 * 1024 * 1024;
+const MAX_TEXT_FILE_BYTES = 8 * 1024 * 1024;
+const MAX_TEXT_MEMORY_BYTES = 128 * 1024 * 1024;
+
+async function hashOpaqueFile(file: string): Promise<{ digest: string; bytes: number }> {
+	const digest = createHash("sha256");
+	let bytes = 0;
+	for await (const chunk of createReadStream(file)) {
+		bytes += chunk.length;
+		if (bytes > MAX_FILE_BYTES) throw new Error("Package file exceeds streaming byte limit");
+		digest.update(chunk);
+	}
+	return { digest: digest.digest("hex"), bytes };
+}
 export const hash = (value: string | Buffer) => createHash("sha256").update(value).digest("hex");
 
 /** Hash every installed byte, including dependencies. Never follow links while walking. */
@@ -14,7 +30,7 @@ export async function snapshot(root: string, includeGit = false): Promise<Snapsh
 	if (!(await lstat(root)).isDirectory()) throw new Error("Package root must be a real directory");
 	const canonical = await realpath(root);
 	const files = new Map<string, Entry>();
-	let bytes = 0;
+	let bytes = 0, textBytes = 0;
 	async function walk(dir: string, prefix: string) {
 		for (const name of (await readdir(dir)).sort()) {
 			if (!includeGit && prefix === "" && name === ".git") continue;
@@ -35,7 +51,15 @@ export async function snapshot(root: string, includeGit = false): Promise<Snapsh
 				files.set(relative, { kind: "link", mode: 0, hash: hash(target), text: target });
 			} else if (stat.isFile()) {
 				bytes += stat.size;
-				if (stat.size > 8 * 1024 * 1024 || bytes > 256 * 1024 * 1024) throw new Error("Package tree exceeds byte limit");
+				if (stat.size > MAX_FILE_BYTES || bytes > MAX_TREE_BYTES) throw new Error("Package tree exceeds streaming byte limit");
+				if (stat.size > MAX_TEXT_FILE_BYTES || textBytes + stat.size > MAX_TEXT_MEMORY_BYTES) {
+					const opaque = await hashOpaqueFile(absolute);
+					bytes += opaque.bytes - stat.size;
+					if (bytes > MAX_TREE_BYTES) throw new Error("Package tree exceeds streaming byte limit");
+					files.set(relative, { kind: "file", mode: stat.mode & 0o777, hash: opaque.digest });
+					continue;
+				}
+				textBytes += stat.size;
 				const data = await readFile(absolute);
 				let text: string | undefined;
 				try { text = new TextDecoder("utf-8", { fatal: true }).decode(data); } catch { /* opaque binary */ }
@@ -55,7 +79,7 @@ export function changes(before: Snapshot, after: Snapshot): Change[] {
 		const a = before.files.get(name) ?? null, b = after.files.get(name) ?? null;
 		if (a?.kind === b?.kind && a?.hash === b?.hash && a?.mode === b?.mode) continue;
 		if ((a && a.text === undefined) || (b && b.text === undefined)) {
-			throw new Error("Changed binary or non-UTF-8 file requires manual review");
+			throw new Error("Changed binary, oversized or non-UTF-8 file requires manual review");
 		}
 		result.push({ path: name, before: a, after: b });
 	}

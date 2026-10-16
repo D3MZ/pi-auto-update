@@ -129,6 +129,15 @@ mutation blocks promotion. Final tree and settings checks still protect the
 exact frozen artifact. Every target is independent; a blocked target does not
 grant approval for another.
 
+## Snapshot resource limits
+
+Snapshots stream-hash opaque files, including large unchanged native artifacts,
+without retaining them as model text. Scans are capped at 1 GiB per tree and
+256 MiB per file. UTF-8 capture is capped at 8 MiB per file and 128 MiB per
+snapshot. An unchanged opaque file is verified by its full SHA-256; any changed
+opaque/binary or uncaptured oversized text still requires manual review. These
+resource bounds prevent raising the model limit or silently ignoring artifacts.
+
 ## Limits
 
 - An LLM can miss or be misled about a vulnerability. Strict JSON is not a

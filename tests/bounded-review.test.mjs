@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, truncate, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { bindPacket, buildReviewPlan, MAX_REVIEW_BATCHES, reviewChangeSet, verifyReviewPlan } from "../extensions/security/batches.ts";
-import { hash, MAX_REVIEW_BYTES, reviewPayload, snapshot } from "../extensions/security/tree.ts";
+import { changes, hash, MAX_REVIEW_BYTES, reviewPayload, snapshot } from "../extensions/security/tree.ts";
 import { modelReviewer } from "../extensions/security/review.ts";
 const approve = (digest, extra = {}) => ({ schemaVersion: 1, candidate: digest, decision: "approve", complete: true, findings: [], reason: "Reviewed supplied code, dependency effects and interactions; no detected concern.", ...extra });
 
@@ -28,6 +28,28 @@ async function fixture(t) {
 	}
 	return { before: await snapshot(a), after: await snapshot(b) };
 }
+
+test("large unchanged native artifacts are stream-hashed without entering model context; changed opaque data still blocks", async (t) => {
+	const root = await mkdtemp(path.join(tmpdir(), "opaque-stream-"));
+	t.after(() => rm(root, { recursive: true, force: true }));
+	await writeFile(path.join(root, "native.node"), "");
+	await truncate(path.join(root, "native.node"), 9 * 1024 * 1024);
+	await writeFile(path.join(root, "small.js"), "export const version = 1;");
+	const before = await snapshot(root);
+	assert.equal(before.files.get("native.node").text, undefined);
+	assert.equal(before.files.get("native.node").hash, hash(Buffer.alloc(9 * 1024 * 1024)));
+	await writeFile(path.join(root, "small.js"), "export const version = 2;");
+	const after = await snapshot(root);
+	assert.deepEqual(changes(before, after).map((c) => c.path), ["small.js"]);
+	let called = false;
+	await reviewChangeSet("fixture", before, after, async (payload, binding) => {
+		called = true; assert.ok(Buffer.byteLength(payload) < 8_192); return approve(binding);
+	}, new AbortController().signal);
+	assert.equal(called, true);
+	await truncate(path.join(root, "native.node"), 9 * 1024 * 1024 + 1);
+	const altered = await snapshot(root);
+	assert.throws(() => changes(after, altered), /Changed binary/);
+});
 
 test("original >180KB rejection becomes lossless bounded coverage including huge files/manifests, Unicode and removals", async (t) => {
 	const { before, after } = await fixture(t);
